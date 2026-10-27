@@ -1,0 +1,20 @@
+# Exact versions used for every measurement (Python 3.12, CUDA 13.0 wheels, driver >= 580).
+vllm==0.32.0
+torch==2.13.0
+triton==3.7.1
+transformers==5.19.0
+bitsandbytes==0.50.2
+accelerate==1.15.0
+compressed-tensors==0.17.0
+flashinfer-python==0.7.0.post1
+huggingface-hub==2.3.0
+tokenizers==0.23.3
+safetensors==0.8.0
+datasets==5.1.0
+nvidia-ml-py==13.615.71
+numpy==2.3.5
+pandas==3.1.0
+scipy==1.18.1
+matplotlib==3.11.2
+tabulate==0.10.0
+python-pptx==1.0.2
