@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# regenerated deterministically by final_project/scripts/prepare_sharegpt.py
+final_project/data/
+
+# downloaded at build time (official UTA template) and node tooling for the icons
+final_project/slides/.cache/
+final_project/slides/assets/node_modules/
+final_project/slides/assets/package-lock.json
+
+# LaTeX intermediates
+final_project/report/*.aux
+final_project/report/*.log
+final_project/report/*.out
+final_project/report/*.bbl
+final_project/report/*.blg
+final_project/report/*.synctex.gz
