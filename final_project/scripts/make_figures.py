@@ -238,7 +238,7 @@ def fig_latency(size="7b"):
     axes[2].set_xlim(0.8, 256 * 1.3)
     fig.tight_layout()
     legend_configs(fig, y=-0.13)
-    save(fig, "q2_latency_throughput")
+    save(fig, "q2_latency_throughput" + ("" if size == "7b" else f"_{size}"))
 
 
 def legend_configs(fig, y=-0.1, ncol=4, configs=(("vllm", "bf16"), ("vllm", "fp8"), ("vllm", "gptq-int8"),
@@ -312,7 +312,7 @@ def fig_heatmaps(size="7b", metric="speedup_e2e"):
     cb.set_ticklabels([f"{2 ** t:g}×" for t in ticks])
     cb.set_label("end-to-end speedup vs BF16 (same backend)\n< 1 slower (red) · > 1 faster (blue)", fontsize=8 * FS)
     cb.outline.set_visible(False)
-    save(fig, "q3_speedup_heatmaps")
+    save(fig, "q3_speedup_heatmaps" + ("" if size == "7b" else f"_{size}"))
 
 
 def fig_kernels(size="7b"):
@@ -331,13 +331,12 @@ def fig_kernels(size="7b"):
         st = S.style(bk, p)
         st["label"] = name
         ax1.plot(r.m, r.speedup, **st)
-        label_end(ax1, r.m.iloc[-1], r.speedup.iloc[-1], name, S.COLOR[p])
-        s = np.log(r.speedup.to_numpy())
+        s = np.log(r.speedup.to_numpy() / 1.05)
         for i in range(1, len(s)):
             if s[i - 1] > 0 >= s[i]:
                 m0, m1 = math.log2(r.m.iloc[i - 1]), math.log2(r.m.iloc[i])
                 mx = 2 ** (m0 + (0 - s[i - 1]) * (m1 - m0) / (s[i] - s[i - 1]))
-                ax1.plot([mx], [1], marker="|", ms=10 * FS, color=S.COLOR[p], mew=1.5)
+                ax1.plot([mx], [1.05], marker="|", ms=10 * FS, color=S.COLOR[p], mew=1.5)
     ax1.axhline(1, color=S.BLUE, lw=1.0)
     ax1.text(1.1, 1.04, "BF16 cuBLAS", color=S.INK2, fontsize=7.5 * FS)
     ax1.set_xscale("log", base=2)
@@ -346,31 +345,32 @@ def fig_kernels(size="7b"):
     ax1.set_xticklabels(["1", "4", "16", "64", "256", "1K", "4K"])
     ax1.set_yticks([0.125, 0.25, 0.5, 1, 2, 4])
     ax1.set_yticklabels(["⅛×", "¼×", "½×", "1×", "2×", "4×"])
-    ax1.set_xlim(0.8, 8192 * 12)
+    ax1.set_xlim(0.8, 8192 * 1.5)
     ax1.set_xlabel("M = tokens per GEMM (decode batch size)")
     ax1.set_ylabel("speedup vs BF16 (one decoder layer)")
     ax1.set_title(f"(a) Linear-layer kernels, {SIZE_LABEL[size]} shapes")
 
     # (b) roofline: achieved TFLOP/s against arithmetic intensity (FLOP per byte of weights+activations)
-    bw = peaks.get("dram_copy_gbps", 1700) / 1e3      # TB/s
+    bw = peaks.get("dram_read_gbps", 1700) / 1e3      # TB/s (decode streams weights: read bandwidth)
     peak_bf16 = peaks.get("bf16_gemm_tflops", 200)
     peak_fp8 = peaks.get("fp8_gemm_tflops", np.nan)
     ai = np.logspace(-0.5, 4, 200)
     ax2.plot(ai, np.minimum(ai * bw, peak_bf16), color=S.INK2, lw=1.0)
     ax2.text(2.0, 2.0 * bw * 1.35, f"DRAM {bw:.2f} TB/s", rotation=38, fontsize=7 * FS, color=S.INK2)
-    ax2.text(3e3, peak_bf16 * 1.08, f"BF16 peak {peak_bf16:.0f} TFLOP/s", ha="right", fontsize=7 * FS, color=S.INK2)
+    ax2.text(8e3, peak_bf16 * 0.8, f"BF16 peak {peak_bf16:.0f}", ha="right", va="top", fontsize=7 * FS, color=S.INK2)
     if not np.isnan(peak_fp8):
         ax2.plot(ai, np.minimum(ai * bw, peak_fp8), color=S.INK2, lw=0.8, ls=":")
-        ax2.text(3e3, peak_fp8 * 1.08, f"FP8 peak {peak_fp8:.0f}", ha="right", fontsize=7 * FS, color=S.INK2)
+        ax2.text(8e3, peak_fp8 * 1.1, f"FP8 peak {peak_fp8:.0f} TFLOP/s", ha="right", fontsize=7 * FS, color=S.INK2)
     bpp = {"bf16": 2, "bnb-int8": 1, "bnb-nf4": 0.5625, "fp8-w8a8": 1, "marlin-w8a16": 1.016, "marlin-w4a16": 0.516}
     kshape = raw[raw.m.isin(layer.m.unique())]
     for k, bk, p, name in [("bf16", "vllm", "bf16", "BF16")] + spec:
         r = kshape[kshape.kernel == k]
         if r.empty:
             continue
-        g = r.groupby("m").apply(lambda t: (2 * t.m * t.k * t.n).sum() / (
-            (t.n * t.k * bpp[k] + t.m * t.k * 2 + t.m * t.n * 2).sum()), include_groups=False)
-        tf = r.groupby("m").apply(lambda t: (2 * t.m * t.k * t.n).sum() / t.time_ms.sum() / 1e9, include_groups=False)
+        r = r.assign(flop=2 * r.m * r.k * r.n, nbytes=r.n * r.k * bpp[k] + r.m * r.k * 2 + r.m * r.n * 2)
+        agg_ = r.groupby("m")[["flop", "nbytes", "time_ms"]].sum()
+        g = agg_.flop / agg_.nbytes
+        tf = agg_.flop / agg_.time_ms / 1e9
         st = S.style(bk, p)
         st["label"] = name
         st["markersize"] = 3.5
@@ -380,8 +380,10 @@ def fig_kernels(size="7b"):
     ax2.set_xlabel("arithmetic intensity (FLOP / byte moved)")
     ax2.set_ylabel("achieved TFLOP/s")
     ax2.set_title("(b) Roofline: fewer weight bytes = more FLOP/byte")
-    ax2.legend(loc="lower right", fontsize=7 * FS)
+    ax2.set_ylim(top=peak_fp8 * 2.2 if not np.isnan(peak_fp8) else None)
     fig.tight_layout()
+    h, l = ax2.get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=6, bbox_to_anchor=(0.5, -0.1), fontsize=7.5 * FS)
     save(fig, "q3_kernel_crossover")
 
 
@@ -433,14 +435,15 @@ def fig_serving(size="7b"):
         return
     vl = vl[vl["size"] == size]
     fig, axes = plt.subplots(1, 3, figsize=(10.2, 3.0))
+    shown = []
     for p in VL_ALL:
         r = vl[vl.precision == p].sort_values("concurrency")
         if r.empty:
             continue
         st = S.style("vllm", p)
-        for ax, col, scale in ((axes[0], "output_throughput", 1), (axes[1], "median_tpot_ms", 1), (axes[2], "median_ttft_ms", 1)):
-            ax.plot(r.concurrency, r[col] * scale, **st)
-        label_end(axes[0], r.concurrency.iloc[-1], r.output_throughput.iloc[-1], S.SHORT[("vllm", p)], S.COLOR[p])
+        for ax, col in ((axes[0], "output_throughput"), (axes[1], "median_tpot_ms"), (axes[2], "median_ttft_ms")):
+            ax.plot(r.concurrency, r[col], **st)
+        shown.append(("vllm", p))
     if not hf.empty:
         h = hf[hf["size"] == size]
         for p in HF_P:
@@ -451,17 +454,25 @@ def fig_serving(size="7b"):
             st["linestyle"] = "none"
             for ax, col in ((axes[0], "output_throughput"), (axes[1], "p50_tpot_ms"), (axes[2], "p50_ttft_ms")):
                 ax.plot(r.concurrency, r[col], **st)
-            label_end(axes[0], r.concurrency.iloc[0], r.output_throughput.iloc[0], S.SHORT[("hf", p)] + " (static)", S.COLOR[p], dx=-4, ha="right")
+            shown.append(("hf", p))
     for ax, t, yl in zip(axes, ["(a) Output throughput", "(b) Median TPOT", "(c) Median TTFT"],
                          ["output tokens / s", "ms per output token", "ms"]):
         pow2_axis(ax, [1, 4, 16, 64])
-        ax.set_xlabel("concurrent requests")
+        ax.set_xlabel("concurrent requests (HF: batch size)")
         ax.set_ylabel(yl)
         ax.set_title(t)
+    for ax in (axes[0], axes[2]):   # HF's static-batch TTFT is an order of magnitude above vLLM's
         ax.set_yscale("log")
-    axes[0].set_xlim(0.8, 64 * 5)
-    fig.suptitle(f"ShareGPT replay (300 requests), {SIZE_LABEL[size]} — vLLM continuous batching (lines) vs HF static batching B=16 (hollow)",
-                 fontsize=9 * FS, y=1.03)
+        plain_ticks(ax)
+    axes[1].set_ylim(0, axes[1].get_ylim()[1] * 1.05)
+    handles = []
+    for bk, p in shown:
+        st = S.style(bk, p)
+        if bk == "hf":
+            st["linestyle"] = "none"
+        handles.append(Line2D([], [], **st))
+    fig.legend(handles=handles, loc="lower center", ncol=min(len(handles), 4), bbox_to_anchor=(0.5, -0.16),
+               handlelength=2.6)
     fig.tight_layout()
     save(fig, "real_sharegpt_serving")
 
@@ -482,6 +493,47 @@ def fig_workload():
     fig.suptitle("ShareGPT sample used for the real-workload replay (n = 300, seed 0)", fontsize=9 * FS)
     fig.tight_layout()
     save(fig, "workload_sharegpt")
+
+
+def outlen_speedups(size="7b", L=512):
+    """End-to-end speedup over BF16 at one prompt length for 32, 128 and 512 generated tokens."""
+    agg, _ = A.sweeps()
+    d = agg[(agg["size"] == size) & (agg.input_len == L) & (agg.batch.isin([1, 16]))
+            & (((agg.tag == "grid") & (agg.output_len == 128)) | (agg.tag == "outlen"))]
+    return A.with_speedup(d)
+
+
+def fig_outlen(size="7b"):
+    sp = outlen_speedups(size)
+    sp = sp[sp.precision != "bf16"].dropna(subset=["speedup_e2e"])
+    if sp.empty or sp.output_len.nunique() < 2:
+        return
+    fig, axes = plt.subplots(1, 2, figsize=(6.4, 2.7), sharey=True)
+    shown = []
+    for ax, B in zip(axes, (1, 16)):
+        d = sp[sp.batch == B]
+        for bk, ps in (("hf", HF_P), ("vllm", VL_P)):
+            for p in ps:
+                r = d[(d.backend == bk) & (d.precision == p)].sort_values("output_len")
+                if len(r) < 2:
+                    continue
+                ax.plot(r.output_len, r.speedup_e2e, **S.style(bk, p))
+                if (bk, p) not in shown:
+                    shown.append((bk, p))
+        ax.axhline(1, color=S.INK2, lw=0.8, ls=":")
+        pow2_axis(ax, [32, 128, 512])
+        ax.set_yscale("log", base=2)
+        ax.set_xlabel("generated tokens N")
+        ax.set_title(f"B = {B}, L = 512")
+    axes[0].set_ylabel("end-to-end speedup over BF16")
+    axes[0].set_ylim(0.22, 3.0)
+    from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter
+    axes[0].yaxis.set_major_locator(FixedLocator([0.25, 0.5, 1, 2, 4]))
+    axes[0].yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}\u00d7"))
+    axes[0].yaxis.set_minor_formatter(NullFormatter())
+    legend_configs(fig, y=-0.2, ncol=3, configs=tuple(shown))
+    fig.tight_layout()
+    save(fig, "q3_output_length")
 
 
 # ----------------------------------------------------------------------------- Q4 quality
@@ -505,6 +557,19 @@ def fig_quality():
         df = df.copy()
         df["mem"] = [mem(b, s, p) for b, s, p in zip(df.backend, df["size"], df.precision)]
         df = df[~((df.backend == "vllm") & (df.precision == "bf16") & df["size"].isin(["3b", "7b"]))]  # HF row is the BF16 reference
+        cap = None
+        if col == "ppl":   # keep the axis readable; an off-scale checkpoint is drawn as an arrow at the top edge
+            med = df.groupby("size")[col].transform("median")
+            off = df[col] > 3 * med
+            if off.any():
+                cap = df.loc[~off, col].max() * 1.12
+                for _, r in df[off].iterrows():
+                    st = S.style(r.backend, r.precision)
+                    ax.annotate(f"{SIZE_LABEL[r['size']].split('-')[1]} {S.SHORT[(r.backend, r.precision)]}: "
+                                f"{r[col]:.1f}\n(off scale)", xy=(r["mem"], cap), xytext=(r["mem"] * 0.96, cap * 0.9),
+                                ha="right", va="top", fontsize=7.5 * FS, color=st["color"],
+                                arrowprops=dict(arrowstyle="-|>", color=st["color"], lw=1.0))
+                df = df[~off]
         for size, g in df.groupby("size"):
             g = g.sort_values("mem")
             yv = g[col] * (100 if col == "accuracy" else 1)
@@ -520,7 +585,12 @@ def fig_quality():
         ax.set_xticklabels(["2", "4", "8", "16", "32"])
         ax.set_xlabel("weight memory (GB, log scale)")
         ax.set_ylabel(yl)
-    ax1.set_title("(a) Accuracy vs memory: bigger-but-quantized wins")
+        if cap is not None:
+            ax.set_ylim(top=cap)
+    acc = {(b, s_, p): a for b, s_, p, a in zip(gsm.backend, gsm["size"], gsm.precision, gsm.accuracy)} if not gsm.empty else {}
+    a14, a7 = acc.get(("vllm", "14b", "awq-int4")), acc.get(("hf", "7b", "bf16"))
+    wins = a14 is not None and a7 is not None and a14 > a7
+    ax1.set_title("(a) Accuracy vs memory: bigger-but-quantized wins" if wins else "(a) GSM8K accuracy vs weight memory")
     ax2.set_title("(b) Perplexity vs memory (lower is better)")
     handles = [Line2D([], [], color=S.COLOR[p], marker=S.MARKER[p], markerfacecolor="white" if b == "hf" else S.COLOR[p],
                       ls="none", label=S.LABEL[(b, p)])
@@ -549,6 +619,12 @@ def fig_energy(size="7b"):
     fig.tight_layout()
     legend_configs(fig, y=-0.32, ncol=2)
     save(fig, "energy_per_token")
+
+
+def fig_appendix_3b():
+    """3B versions of the latency and crossover figures (report appendix)."""
+    fig_latency("3b")
+    fig_heatmaps("3b")
 
 
 def fig_capacity():

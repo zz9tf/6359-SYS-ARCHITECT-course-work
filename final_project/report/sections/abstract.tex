@@ -1,0 +1,17 @@
+\begin{abstract}
+Quantization is the standard way to fit large language models into GPU memory, but a smaller
+model is not automatically a faster one. We measure the memory--performance trade-off end to end
+on an NVIDIA RTX 5090 for Qwen2.5 models with 3B, 7B and 14B parameters in eight
+configurations: BF16, LLM.int8() and NF4 on Hugging Face Transformers, and BF16, FP8 W8A8,
+GPTQ-INT8, AWQ-INT4 and GPTQ-INT4 on vLLM. The study covers \NumMeasurements{} timed runs, a
+replay of 300 ShareGPT requests, WikiText-2 perplexity and GSM8K accuracy. Real weight savings fall
+short of the nominal ratio (\WtNFSeven{} rather than $4\times$ for 4-bit weights on the 7B model)
+and shrink further at run time because the KV cache and activations stay in 16 bits. Speed depends
+on the kernel and the regime rather than on the bit-width: at batch size one the same 4-bit weights
+decode \AWQspeedup{} faster than BF16 with vLLM's Marlin kernels, while bitsandbytes LLM.int8() is
+\INTeightslowdown{} slower. Weight-only formats stop paying off once batching makes decoding
+compute-bound, whereas FP8 W8A8 stays faster everywhere and delivers \ThrFPratio{} the BF16
+throughput at batch size 256. Kernel microbenchmarks, a measured roofline and per-step profiles
+explain every crossover. \QualityAbstract{} We release the harness, the raw measurements and a
+decision guide for practitioners.
+\end{abstract}

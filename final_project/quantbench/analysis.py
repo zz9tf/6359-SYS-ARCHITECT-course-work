@@ -131,14 +131,46 @@ def serving():
     return vl, hf
 
 
+def mmlu():
+    d = raw("quality_mmlu.jsonl")
+    return d.drop_duplicates(["backend", "size", "precision"], keep="last") if not d.empty else d
+
+
 def quality():
     ppl = raw("quality_ppl.jsonl")
     gsm = raw("quality_gsm8k.jsonl")
     if not ppl.empty:
+        if "dtype" in ppl:  # runs with a forced activation dtype are diagnostics, see ppl_dtype_variants()
+            ppl = ppl[ppl["dtype"].isna() | (ppl["dtype"] == "auto")]
         ppl = ppl.drop_duplicates(["backend", "size", "precision"], keep="last")
     if not gsm.empty:
         gsm = gsm.drop_duplicates(["backend", "size", "precision"], keep="last")
     return ppl, gsm
+
+
+def ppl_diag():
+    """Diagnostic perplexity runs: a forced vLLM activation dtype or kernel (results/quality_ppl_diag.jsonl, plus
+    any forced-dtype rows in quality_ppl.jsonl)."""
+    parts = [raw("quality_ppl_diag.jsonl"), raw("quality_ppl.jsonl")]
+    parts = [d for d in parts if not d.empty]
+    if not parts:
+        return pd.DataFrame()
+    d = pd.concat(parts, ignore_index=True)
+    for c in ("dtype", "quantization"):
+        if c not in d:
+            d[c] = None
+    d["dtype"] = d["dtype"].fillna("auto")
+    d["quantization"] = d["quantization"].fillna("default")
+    return d.drop_duplicates(["backend", "size", "precision", "dtype", "quantization"], keep="last")
+
+
+def ppl_windows(tag):
+    """Per-window and per-position mean NLL of one perplexity run (results/ppl_windows/<tag>.json)."""
+    f = RESULTS / "ppl_windows" / f"{tag}.json"
+    if not f.exists():
+        return {}
+    d = json.loads(f.read_text())
+    return {"window_nll": d} if isinstance(d, list) else d
 
 
 def hw_peaks():
@@ -180,7 +212,8 @@ def param_breakdown(size):
         return ParamBreakdown(linear=int(r.params_linear), embed=int(r.params_embed),
                               lm_head=int(r.params_lm_head), other=int(r.params_other))
     from transformers import AutoConfig
-    return from_config(AutoConfig.from_pretrained(f"Qwen/Qwen2.5-{size.upper()}-Instruct"))
+    from . import configs
+    return from_config(AutoConfig.from_pretrained(configs.BASE[size]))
 
 
 def save_csv(df, name):
@@ -191,7 +224,12 @@ def save_csv(df, name):
 
 
 def gsm8k_paired(a, b):
-    """McNemar exact test between two GSM8K runs on the same questions.
+    """McNemar exact test between two GSM8K runs on the same questions (see paired())."""
+    return paired("gsm8k", a, b)
+
+
+def paired(bench, a, b):
+    """McNemar exact test between two runs of one benchmark (gsm8k, mmlu) on the same questions.
 
     a, b: (backend, size, precision). Returns accuracy difference (b - a, percentage points), the
     discordant counts and the two-sided exact p-value.
@@ -199,7 +237,7 @@ def gsm8k_paired(a, b):
     from scipy.stats import binomtest
 
     def load(cfg):
-        rows = read_jsonl(RESULTS / "gsm8k_outputs" / f"{cfg[0]}_{cfg[1]}_{cfg[2]}.jsonl")
+        rows = read_jsonl(RESULTS / f"{bench}_outputs" / f"{cfg[0]}_{cfg[1]}_{cfg[2]}.jsonl")
         return {r["idx"]: bool(r["correct"]) for r in rows}
 
     ra, rb = load(a), load(b)

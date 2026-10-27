@@ -1,0 +1,23 @@
+\begin{table}[t]
+\centering
+\footnotesize
+\caption{Real workload --- 300 ShareGPT requests replayed against Qwen2.5-7B (reference output lengths). $C$: concurrent closed-loop clients for vLLM, static batch size for HF. Throughput in requests/s and output tokens/s; TTFT and TPOT in ms.}
+\label{tab:serving}
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{lrrrrr}
+\toprule
+Config & $C$ & req/s & tok/s & TTFT p50 / p99 & TPOT p50 / p99 \\
+\midrule
+vLLM BF16 & 1 & 0.35 & 104 & 16 / 62 & 9.6 / 9.6 \\
+vLLM BF16 & 64 & 11.76 & 3537 & 46 / 1654 & 13.6 / 16.7 \\
+vLLM FP8 & 1 & 0.54 & 164 & 11 / 44 & 6.1 / 6.2 \\
+vLLM FP8 & 64 & 17.92 & 5388 & 33 / 1485 & 8.9 / 15.1 \\
+vLLM GPTQ-8 & 1 & 0.55 & 166 & 11 / 63 & 6.0 / 6.2 \\
+vLLM GPTQ-8 & 64 & 15.74 & 4733 & 41 / 1743 & 10.5 / 18.0 \\
+vLLM AWQ-4 & 1 & 0.80 & 240 & 11 / 65 & 4.1 / 4.5 \\
+vLLM AWQ-4 & 64 & 17.23 & 5180 & 40 / 1747 & 10.1 / 14.8 \\
+vLLM GPTQ-4 & 1 & 0.80 & 241 & 11 / 62 & 4.1 / 4.4 \\
+vLLM GPTQ-4 & 64 & 17.23 & 5181 & 40 / 1722 & 10.0 / 19.3 \\
+\bottomrule
+\end{tabular}
+\end{table}

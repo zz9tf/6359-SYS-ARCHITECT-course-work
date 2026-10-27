@@ -12,7 +12,14 @@ BASE = {
     "3b": "Qwen/Qwen2.5-3B-Instruct",
     "7b": "Qwen/Qwen2.5-7B-Instruct",
     "14b": "Qwen/Qwen2.5-14B-Instruct",
+    # second model family, used to check that the conclusions carry over (run in non-thinking mode)
+    "q3-8b": "Qwen/Qwen3-8B",
 }
+
+MODEL_LABEL = {"3b": "Qwen2.5-3B", "7b": "Qwen2.5-7B", "14b": "Qwen2.5-14B", "q3-8b": "Qwen3-8B"}
+
+# pre-quantized checkpoints published for each model (Qwen3-8B has no official GPTQ release)
+VLLM_AVAILABLE = {"q3-8b": ["bf16", "fp8", "awq-int4"]}
 
 HF_PRECISIONS = ["bf16", "int8", "nf4"]
 

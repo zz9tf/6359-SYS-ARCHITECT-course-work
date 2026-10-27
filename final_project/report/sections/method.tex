@@ -1,0 +1,74 @@
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Platform}
+All measurements run on one NVIDIA GeForce RTX 5090 (Blackwell GB202, compute capability 12.0,
+170 SMs, 32\,GB GDDR7 on a 512-bit bus, 96\,MB L2, 575\,W board power, PCIe~5.0~x16) in a
+workstation with an Intel Core Ultra~9 285K and 64\,GB of RAM, running Ubuntu~24.04, driver
+595.91, PyTorch~2.13 (CUDA~13.0 runtime), Transformers~5.19, bitsandbytes~0.50.2 and vLLM~0.32
+(V1 engine, FlashAttention backend, CUDA graphs and \texttt{torch.compile} enabled). The GPU's
+practical ceilings, measured with our own microbenchmarks (\cref{sec:mechanism}), are
+\BWmeas\,TB/s of DRAM bandwidth and \BFmeas\,TFLOP/s of dense BF16
+GEMM throughput, which puts the BF16 ridge point at about \RidgeBF{} FLOP/byte.
+
+\subsection{Models and configurations}
+We use the instruction-tuned Qwen2.5 models~\cite{qwen2024qwen25} at 3B, 7B and 14B parameters.
+\Cref{tab:configs} lists the eight configurations. The Hugging Face (HF) backend is what a
+practitioner gets from one extra argument to \texttt{from\_pretrained}: the BF16 checkpoint is
+quantized on the fly by bitsandbytes and executed eagerly. The vLLM backend is a production
+serving engine that runs the official Qwen GPTQ and AWQ checkpoints (group size 128) with Marlin
+kernels and quantizes the BF16 checkpoint to FP8 at load time. In every configuration the token
+embedding, the LM head and the norms stay in 16-bit.
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Configurations. W/A: weight/activation precision during the GEMM.}
+\label{tab:configs}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{llllll}
+\toprule
+Backend & Name & W/A & Method & Kernel & Source \\
+\midrule
+HF   & BF16 & 16/16 & --- & cuBLAS & BF16 ckpt \\
+HF   & INT8 & 8/8$^{\dagger}$ & LLM.int8() & bnb/cuBLASLt & on load \\
+HF   & NF4  & 4/16 & NF4, block 64 & bnb dequant/GEMV & on load \\
+vLLM & BF16 & 16/16 & --- & cuBLAS & BF16 ckpt \\
+vLLM & FP8  & 8/8 & FP8 E4M3 & CUTLASS & on load \\
+vLLM & GPTQ-8 & 8/16 & GPTQ g128 & Marlin & Qwen ckpt \\
+vLLM & AWQ-4 & 4/16 & AWQ g128 & Marlin & Qwen ckpt \\
+vLLM & GPTQ-4 & 4/16 & GPTQ g128 & Marlin & Qwen ckpt \\
+\bottomrule
+\end{tabular}
+\par\vspace{2pt}\parbox{\linewidth}{\scriptsize $^{\dagger}$Activation columns with outliers
+($|x|>6$) are multiplied in FP16.}
+\end{table}
+
+\subsection{Workloads}
+\textbf{Controlled sweep.} Each configuration generates exactly $N=128$ tokens (EOS suppressed) for
+$B\in\{1,2,4,\dots,64\}$ prompts (up to 256 on vLLM) of $L\in\{128,512,1024,2048\}$ random tokens.
+Content does not change the speed of a dense model, and random prompts make every precision do
+identical work. A smaller sweep varies $N\in\{32,128,512\}$.
+\textbf{Real workload.} We draw 300 conversations from ShareGPT~\cite{sharegpt} with a fixed seed
+and the same filters as vLLM's benchmark (prompt $\le$1024 tokens, prompt$+$output $\le$2048).
+The first user turn is the prompt and the first assistant turn sets the exact output length
+(median prompt 31 tokens, median output 284 tokens). vLLM replays them through its
+OpenAI-compatible server with \texttt{vllm bench serve} at 1, 4, 16 and 64 concurrent clients.
+HF processes them in arrival order in static batches of 16.
+\textbf{Quality.} WikiText-2~\cite{merity2017wikitext} perplexity uses the GPTQ/AWQ protocol:
+non-overlapping 2048-token windows of the raw test split. GSM8K~\cite{cobbe2021gsm8k} accuracy
+uses all 1,319 test questions with zero-shot chain-of-thought (Qwen's ``reason step by step,
+answer in \texttt{\textbackslash boxed\{\}}'' instruction) and greedy decoding up to 512 tokens.
+
+\subsection{Metrics and protocol}
+On HF, a streamer timestamps every token that \texttt{generate} emits; each emission copies the
+token to the host, so a timestamp is taken only after the GPU has produced that token.
+TTFT is the time to the first emission, $\text{TPOT}=(\text{E2E}-\text{TTFT})/(N-1)$, and
+throughput is $BN/\text{E2E}$. On vLLM we follow \texttt{vllm bench latency}: TTFT is the latency
+of the batch with one output token, and TPOT is the extra latency of $N$ tokens divided by $N-1$.
+Prefix caching is disabled so repeats never reuse KV blocks. Every cell runs one warm-up and three
+measured repetitions with fresh prompts; the coefficient of variation stays below
+\CVmax\%. Memory comes from PyTorch's allocator (peak allocated) and from NVML (device
+total). Energy is the difference of NVML's cumulative energy counter over the three repetitions,
+divided by the number of generated tokens. The GPU also drives the workstation's display, so we
+report means over repetitions and do not lock clocks; the average SM clock during the
+measurements is \ClockAvg\,MHz.

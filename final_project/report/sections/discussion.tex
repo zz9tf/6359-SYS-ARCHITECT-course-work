@@ -1,0 +1,48 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{When does quantization pay off?}
+Our measurements reduce to five rules for deploying a quantized LLM on a GPU like the RTX 5090.
+
+\textbf{(1) Budget memory with the real ratio, not $16/b$.} Every format saves memory, but the
+16-bit embedding, LM head and scales cap 4-bit formats at \WtNFSeven--\WtAWQSeven{} for a 7B
+model, and the KV cache and activations are not quantized at all. A capacity plan that assumes
+$4\times$ will run out of memory.
+
+\textbf{(2) For interactive, low-concurrency serving, use 4-bit weight-only formats with fused
+kernels.} At one request per GPU, AWQ-INT4 with Marlin decodes \AWQspeedup{} faster than BF16
+and uses \EnRatioAWQone{} less energy per token.
+
+\textbf{(3) For high-throughput serving, use W8A8 FP8.} Weight-only formats lose their advantage
+once the batch makes decode compute-bound ($B\gtrsim\AWQcross$ for AWQ at 512-token prompts) and
+never speed up prefill. FP8 is the only format that keeps winning, with \ThrFPratio{} the BF16
+throughput at $B=256$, because it also doubles the tensor-core rate.
+
+\textbf{(4) Quantize for memory, not speed, when only bitsandbytes is available.} LLM.int8() is
+\INTeightslowdown{} slower than BF16 at batch size one and never catches up, and NF4 is faster only
+for small batches of a model large enough to be memory-bound. Both remain useful to fit a model
+that otherwise would not fit.
+
+\textbf{(5) \GuideHead} \QualityGuide
+
+\noindent Across all five, the bit-width alone predicts very little; the kernel that executes the
+format and the regime the workload puts the GPU in decide the outcome.
+
+\input{sections/limitations}
+
+\section{Conclusion}
+\label{sec:conclusion}
+We measured how much memory LLM quantization saves and when it makes inference faster, using
+eight configurations of Qwen2.5 models on an RTX 5090. Memory savings are real but smaller than
+advertised: \WtNFSeven{} instead of $4\times$ for 4-bit weights, and as little as \MemBigNF{} end
+to end once the KV cache grows. Speed depends on the kernel and the regime rather than on the
+bit-width: the same 4-bit weights run \AWQspeedup{} faster than BF16 with Marlin and slower with
+bitsandbytes, weight-only gains disappear in the compute-bound regime, and FP8 W8A8 is the only
+format that is faster everywhere. \QualityConclusion{} Smaller is not always faster---but with the
+right kernel, for the right regime, it is both smaller and faster.
+
+\section*{Division of work}
+Following the proposal, Sijia Zhong built the baseline harness and the memory study (Q1), Zheng Zheng
+ran the controlled precision/batch/length sweeps and the kernel and profiling analysis (Q2), and
+Haofei Sun ran the ShareGPT and quality evaluations (Q3, Q4). All three analyzed the results and
+wrote the report and slides.

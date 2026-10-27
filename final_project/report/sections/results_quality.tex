@@ -1,0 +1,38 @@
+\Cref{tab:quality,fig:quality} report WikiText-2 perplexity and GSM8K accuracy. Every GSM8K
+comparison is paired: all configurations answer the same 1,319 questions, so we test each
+difference against HF BF16 with an exact McNemar test on the questions where exactly one of the two
+runs is correct.
+
+\textbf{Noise floor.} Even two BF16 runs of the same weights disagree. vLLM and HF use different
+kernels and accumulation orders, and greedy decoding turns the resulting rounding differences into
+different reasoning chains: the two backends disagree on \BackendFlipsSeven{} of the 7B model's
+questions and their accuracies differ by \BackendNoiseSeven{} points (\BackendNoiseThree{} for 3B).
+Differences of this size are not caused by quantization.
+
+\textbf{8-bit formats preserve quality.} LLM.int8(), GPTQ-INT8 and FP8 W8A8 stay within
+\DEightAbsSeven{} GSM8K points and \PPLEightAbsSeven{} perplexity of BF16 on the 7B model
+(\DEightAbsThree{} points on 3B), and \EightSentence.
+
+\textbf{4-bit formats cost little on 7B and more on 3B.} The 4-bit formats raise perplexity by
+\PPLFourMinSeven{} to \PPLFourMaxSeven{} on the 7B model, and its GSM8K accuracy changes by only
+\DFourMinSeven{} to \DFourMaxSeven{} points, none significant. The 3B model loses
+\DFourMinThree{} to \DFourMaxThree{} points with \PPLFourMinThree{} to \PPLFourMaxThree{}
+perplexity, and \FourThreeSurvive{} of these drops remain significant after a Bonferroni correction:
+a smaller model has less redundancy to absorb the rounding error.
+
+\textbf{Model size versus bit-width.} \Cref{fig:quality} places every configuration by its weight
+memory. \QualityGuide{} At a fixed memory budget, parameters are worth more than bits.
+
+\textbf{One metric is not enough.} The 14B GPTQ-INT4 checkpoint scores \AccGPTQFourFourteenPct\%
+on GSM8K, on par with the other 14B formats, yet its WikiText-2 perplexity is
+\PPLGPTQFourFourteen{} against \PPLOthersFourteen{} for AWQ-INT4, GPTQ-INT8 and FP8. The outlier
+is not an artifact of our setup: it persists with BF16 instead of FP16 activations, the loss is
+elevated at every position of the 2048-token window, and the same harness scores the 7B GPTQ-INT4
+checkpoint normally. Ranking the next token shows what happened. On raw WikiText the checkpoint predicts the
+next token correctly only \TopOneGPTQWiki\% of the time (\TopOneOthersWiki\% for the other 14B
+formats), whereas on chat-formatted GSM8K solutions it matches them (\TopOneGPTQChat\% vs.\
+\TopOneOthersChat\%). The quantized weights still model the chat distribution they serve but have
+lost much of their general language modeling. GSM8K alone would have missed this; perplexity alone
+would have rejected a checkpoint that works for chat.
+
+\input{tables/t_quality}

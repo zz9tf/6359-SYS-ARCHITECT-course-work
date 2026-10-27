@@ -94,7 +94,8 @@ def main():
         ds = ds.select(range(args.limit))
     tok = AutoTokenizer.from_pretrained(configs.BASE[args.size])
     prompts = [tok.apply_chat_template([{"role": "user", "content": q + INSTRUCTION}],
-                                       tokenize=False, add_generation_prompt=True) for q in ds["question"]]
+                                       tokenize=False, add_generation_prompt=True,
+                                       enable_thinking=False) for q in ds["question"]]
     t0 = time.perf_counter()
     if args.backend == "hf":
         texts = generate_hf(configs.hf_model_id(args.size), args.precision, prompts, args.max_new_tokens, args.batch)

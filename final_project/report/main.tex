@@ -1,0 +1,46 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{amsmath,amssymb}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+\usepackage{balance}
+\sisetup{detect-all}
+\graphicspath{{../figures/}}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.8}
+\renewcommand{\dblfloatpagefraction}{0.8}
+\setcounter{topnumber}{3}
+\setcounter{dbltopnumber}{2}
+\input{numbers}
+
+\begin{document}
+
+\title{Smaller Is Not Always Faster:\\ The Memory--Performance Trade-off of LLM Quantization on an RTX 5090}
+
+\author{\IEEEauthorblockN{Sijia Zhong \qquad Zheng Zheng \qquad Haofei Sun}
+\IEEEauthorblockA{CSE 6359 Advanced Topics in Systems \& Architecture, Fall 2026\\
+The University of Texas at Arlington}}
+
+\maketitle
+
+\input{sections/abstract}
+\input{sections/intro}
+\input{sections/background}
+\input{sections/method}
+\input{sections/results}
+\input{sections/discussion}
+
+\balance
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\input{sections/appendix}
+
+\end{document}

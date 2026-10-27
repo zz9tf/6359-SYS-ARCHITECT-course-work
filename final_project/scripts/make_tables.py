@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Summary tables: CSV (results/summary), LaTeX (report/tables) and Markdown (results/summary/*.md)."""
+import re
 import sys
 from pathlib import Path
 
@@ -27,7 +28,7 @@ def write(df, name, caption, label, colfmt=None, note=None, wide=False):
     (MD / f"{name}.md").write_text(df.to_markdown(index=False) + "\n")
     colfmt = colfmt or "l" + "r" * (len(df.columns) - 1)
     body = df.to_latex(index=False, escape=False, column_format=colfmt, na_rep="--")
-    body = body.replace("\\toprule", "\\toprule").replace("%", "\\%")
+    body = re.sub(r"(?<!\\)%", r"\\%", body)
     env = "table*" if wide else "table"
     tex = [f"\\begin{{{env}}}[t]", "\\centering", "\\footnotesize", f"\\caption{{{caption}}}", f"\\label{{{label}}}",
            "\\setlength{\\tabcolsep}{4pt}" if wide else "\\setlength{\\tabcolsep}{3.2pt}", body.strip()]
@@ -36,6 +37,22 @@ def write(df, name, caption, label, colfmt=None, note=None, wide=False):
     tex.append(f"\\end{{{env}}}")
     (TEX / f"{name}.tex").write_text("\n".join(tex) + "\n")
     print(f"  wrote {name}")
+
+
+SHORT = {("hf", "bf16"): "HF BF16", ("hf", "int8"): "HF INT8", ("hf", "nf4"): "HF NF4",
+         ("vllm", "bf16"): "vLLM BF16", ("vllm", "fp8"): "vLLM FP8", ("vllm", "gptq-int8"): "vLLM GPTQ-8",
+         ("vllm", "awq-int4"): "vLLM AWQ-4", ("vllm", "gptq-int4"): "vLLM GPTQ-4"}
+
+
+def signed(v, nd):
+    """Signed delta with a real minus sign; '--' when either side is missing."""
+    if v is None or np.isnan(v):
+        return "--"
+    return f"${v:+.{nd}f}$"
+
+
+def fmt_p(p):
+    return "$<$0.001" if p < 0.001 else f"{p:.3f}"
 
 
 def fmt(x, nd=1, suffix=""):
@@ -132,10 +149,10 @@ def table_crossover(size="7b"):
 
 def table_quality():
     ppl, gsm = A.quality()
-    hf, vl = A.loads()
     rows = []
     for size in ("3b", "7b", "14b"):
         base_ppl = base_acc = None
+        first = True
         for b, p in ORDER:
             q = ppl[(ppl.backend == b) & (ppl["size"] == size) & (ppl.precision == p)] if not ppl.empty else ppl
             g = gsm[(gsm.backend == b) & (gsm["size"] == size) & (gsm.precision == p)] if not gsm.empty else gsm
@@ -143,16 +160,24 @@ def table_quality():
                 continue
             pv = q.ppl.iloc[0] if len(q) else np.nan
             av = g.accuracy.iloc[0] * 100 if len(g) else np.nan
-            if b == "hf" and p == "bf16":
+            ref = b == "hf" and p == "bf16"
+            if ref:
                 base_ppl, base_acc = pv, av
-            rows.append({"Model": f"Qwen2.5-{size.upper()}", "Config": TEXNAME[(b, p)],
-                         "WikiText-2 PPL": fmt(pv, 3),
-                         "$\\Delta$PPL": fmt(pv - base_ppl, 3) if base_ppl is not None and p != "bf16" else "--",
-                         "GSM8K (\\%)": fmt(av, 1),
-                         "$\\Delta$acc (pp)": fmt(av - base_acc, 1) if base_acc is not None and p != "bf16" else "--"})
+            test = None if ref else A.gsm8k_paired(("hf", size, "bf16"), (b, size, p))
+            same = ppl[(ppl["size"] == size)].ppl if not ppl.empty else pd.Series(dtype=float)
+            outlier = len(same) > 2 and pv > 3 * same.median()
+            rows.append({"Model": size.upper() if first else "", "Config": SHORT[(b, p)],
+                         "PPL": fmt(pv, 2) + ("$^{\\ddagger}$" if outlier else ""),
+                         "$\\Delta$PPL": signed(pv - base_ppl, 2) if not ref and base_ppl is not None else "--",
+                         "GSM8K (%)": fmt(av, 1),
+                         "$\\Delta$acc": signed(av - base_acc, 1) if not ref and base_acc is not None else "--",
+                         "$p$": fmt_p(test["p_value"]) if test else "--"})
+            first = False
     write(pd.DataFrame(rows), "t_quality",
           "Q4 --- quality. WikiText-2 perplexity (2048-token windows) and GSM8K accuracy (1,319 questions, zero-shot "
-          "CoT, greedy). Deltas are against HF BF16 of the same model.", "tab:quality", colfmt="llrrrr")
+          "CoT, greedy decoding). Deltas are against HF BF16 of the same model; $p$ is the two-sided exact McNemar "
+          "test of the paired GSM8K answers against HF BF16.", "tab:quality", colfmt="llrrrrr",
+          note="$^{\\ddagger}$Degraded on raw text but not on chat-formatted text; see \\cref{sec:q4}.")
 
 
 def table_serving(size="7b"):
@@ -168,15 +193,16 @@ def table_serving(size="7b"):
                 continue
             ttft = x.get("median_ttft_ms", x.get("p50_ttft_ms"))
             tpot = x.get("median_tpot_ms", x.get("p50_tpot_ms"))
-            rows.append({"Config": TEXNAME[(b, p)] + (" (static)" if b == "hf" else ""), "Conc.": int(x.concurrency),
-                         "Output tok/s": fmt(x.output_throughput, 0), "p50 TTFT (ms)": fmt(ttft, 0),
-                         "p99 TTFT (ms)": fmt(x.get("p99_ttft_ms"), 0), "p50 TPOT (ms)": fmt(tpot, 1),
-                         "p99 TPOT (ms)": fmt(x.get("p99_tpot_ms"), 1)})
+            rows.append({"Config": SHORT[(b, p)] + (" (static)" if b == "hf" else ""), "$C$": int(x.concurrency),
+                         "req/s": fmt(x.get("request_throughput"), 2),
+                         "tok/s": fmt(x.output_throughput, 0),
+                         "TTFT p50 / p99": f"{fmt(ttft, 0)} / {fmt(x.get('p99_ttft_ms'), 0)}",
+                         "TPOT p50 / p99": f"{fmt(tpot, 1)} / {fmt(x.get('p99_tpot_ms'), 1)}"})
     if rows:
         write(pd.DataFrame(rows), "t_serving",
-              f"Real workload --- 300 ShareGPT requests replayed against Qwen2.5-{size.upper()} (exact reference output "
-              "lengths). vLLM: closed-loop clients at the given concurrency; HF: static batches of 16.", "tab:serving",
-              colfmt="lrrrrrr")
+              f"Real workload --- 300 ShareGPT requests replayed against Qwen2.5-{size.upper()} (reference output "
+              "lengths). $C$: concurrent closed-loop clients for vLLM, static batch size for HF. Throughput in "
+              "requests/s and output tokens/s; TTFT and TPOT in ms.", "tab:serving", colfmt="lrrrrr")
 
 
 def main():

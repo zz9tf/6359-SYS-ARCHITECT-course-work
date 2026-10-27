@@ -1,0 +1,33 @@
+\appendices
+\section{Qwen2.5-3B}
+\label{app:3b}
+\Cref{fig:latency3b,fig:heatmaps3b} repeat the latency and crossover analysis for the 3B model.
+The vLLM picture is the same as for 7B. On HF the smaller model is worse off: its BF16 step is
+already bound by host overhead (\TPOTbfHFThree\,ms per step against a \FloorThree\,ms
+memory floor), so fewer bytes cannot help, NF4 never beats BF16, and LLM.int8() falls to
+\IntThreeWorst{} of BF16 speed because the 36-layer model launches more kernels per step than the
+28-layer 7B model.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{q2_latency_throughput_3b}
+\caption{Latency and throughput of Qwen2.5-3B (same layout as \cref{fig:latency}).}
+\label{fig:latency3b}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.8\textwidth]{q3_speedup_heatmaps_3b}
+\caption{End-to-end speedup over BF16 for Qwen2.5-3B (same layout as \cref{fig:heatmaps}).}
+\label{fig:heatmaps3b}
+\end{figure*}
+
+\section{Reproducibility}
+\label{app:repro}
+Every number in this report is generated from the raw measurements by
+\texttt{scripts/make\_numbers.py}; figures and tables come from \texttt{make\_figures.py} and
+\texttt{make\_tables.py}. \texttt{run\_all.sh} re-runs all experiments
+(about nine GPU-hours on an RTX 5090). A job queue ran the experiments one at a time and only
+while no other user's process was on the GPU; rows written while the GPU was shared
+(\ExcludedWindows, logged in \texttt{results/excluded\_windows.jsonl}) are discarded and those jobs
+were re-run. \RecheckSentence

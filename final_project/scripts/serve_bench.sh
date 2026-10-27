@@ -22,12 +22,16 @@ vllm serve "$MODEL" "${QARG[@]}" --port "$PORT" --gpu-memory-utilization 0.85 --
     --max-num-seqs 256 --no-enable-prefix-caching --seed 0 > "results/serve_logs/${SIZE}_${PREC}.log" 2>&1 &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null; wait $SERVER 2>/dev/null || true' EXIT
-until curl -sf "localhost:$PORT/health" > /dev/null; do
-    kill -0 "$SERVER" 2>/dev/null || { echo "server died"; tail -20 "results/serve_logs/${SIZE}_${PREC}.log"; exit 1; }
+server_alive() { local st; st=$(ps -o stat= -p "$SERVER" 2>/dev/null); [ -n "$st" ] && [ "${st:0:1}" != Z ]; }
+for _ in $(seq 120); do                      # up to 10 minutes for engine start-up
+    curl -sf "localhost:$PORT/health" > /dev/null && break
+    server_alive || { echo "server died"; tail -20 "results/serve_logs/${SIZE}_${PREC}.log"; exit 1; }
     sleep 5
 done
+curl -sf "localhost:$PORT/health" > /dev/null || { echo "server not ready"; exit 1; }
 
 for C in $CONC; do
+    server_alive || { echo "server died before concurrency $C"; exit 1; }
     vllm bench serve --backend vllm --base-url "http://localhost:$PORT" --model "$MODEL" \
         --dataset-name sharegpt --dataset-path data/sharegpt_300.json --num-prompts 300 \
         --max-concurrency "$C" --ignore-eos --seed 0 --num-warmups 8 \

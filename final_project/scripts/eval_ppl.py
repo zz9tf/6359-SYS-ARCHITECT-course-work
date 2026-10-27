@@ -7,6 +7,7 @@ backend runs a forward pass per window; the ``vllm`` backend requests the log-pr
 prompt token, which lets us score checkpoints that only vLLM can execute (FP8, GPTQ, AWQ).
 """
 import argparse
+import json
 import math
 import os
 import sys
@@ -37,28 +38,23 @@ def wikitext_windows(tokenizer, seqlen):
 def nll_hf(model_id, precision, windows):
     from quantbench import hf
     model, _, _ = hf.load(model_id, precision)
-    total, count = 0.0, 0
+    per_token = []
     for w in windows:
         x = torch.tensor([w], device="cuda")
         logits = model(input_ids=x).logits[0, :-1].float()
-        total += torch.nn.functional.cross_entropy(logits, x[0, 1:], reduction="sum").item()
-        count += len(w) - 1
-    return total, count
+        per_token.append(torch.nn.functional.cross_entropy(logits, x[0, 1:], reduction="none").cpu().tolist())
+    return per_token
 
 
-def nll_vllm(model_id, quant, windows, seqlen):
+def nll_vllm(model_id, quant, windows, seqlen, dtype="auto"):
+    """Per-token NLL of every window (list of lists)."""
     from vllm import LLM, SamplingParams
     from vllm.inputs import TokensPrompt
     llm = LLM(model=model_id, quantization=quant, gpu_memory_utilization=0.85, max_model_len=seqlen + 16,
-              enable_prefix_caching=False, seed=0, max_num_seqs=8)
+              enable_prefix_caching=False, seed=0, max_num_seqs=8, dtype=dtype)
     sp = SamplingParams(temperature=0.0, max_tokens=1, prompt_logprobs=0)
     outs = llm.generate([TokensPrompt(prompt_token_ids=w) for w in windows], sp, use_tqdm=False)
-    total, count = 0.0, 0
-    for w, o in zip(windows, outs):
-        for pos in range(1, len(w)):
-            total -= o.prompt_logprobs[pos][w[pos]].logprob
-            count += 1
-    return total, count
+    return [[-o.prompt_logprobs[pos][w[pos]].logprob for pos in range(1, len(w))] for w, o in zip(windows, outs)]
 
 
 def main():
@@ -67,7 +63,11 @@ def main():
     ap.add_argument("--size", default="7b")
     ap.add_argument("--precision", required=True)
     ap.add_argument("--seqlen", type=int, default=2048)
+    ap.add_argument("--dtype", default="auto", help="vLLM activation dtype (checkpoint default if auto)")
+    ap.add_argument("--quantization", default=None, help="override vLLM's quantization method (e.g. gptq instead of gptq_marlin)")
     ap.add_argument("--out", type=Path, default=RESULTS / "quality_ppl.jsonl")
+    ap.add_argument("--windows-out", type=Path, default=RESULTS / "ppl_windows",
+                    help="directory for the per-window NLL of each run")
     args = ap.parse_args()
 
     from transformers import AutoTokenizer
@@ -75,15 +75,24 @@ def main():
     windows, n_tokens = wikitext_windows(tok, args.seqlen)
     t0 = time.perf_counter()
     if args.backend == "hf":
-        total, count = nll_hf(configs.hf_model_id(args.size), args.precision, windows)
+        per_token = nll_hf(configs.hf_model_id(args.size), args.precision, windows)
     else:
         model_id, quant = configs.vllm_spec(args.size, args.precision)
-        total, count = nll_vllm(model_id, quant, windows, args.seqlen)
+        per_token = nll_vllm(model_id, args.quantization or quant, windows, args.seqlen, args.dtype)
+    total, count = sum(map(sum, per_token)), sum(map(len, per_token))
     ppl = math.exp(total / count)
     row = {"backend": args.backend, "size": args.size, "precision": args.precision, "seqlen": args.seqlen,
            "windows": len(windows), "tokens_scored": count, "corpus_tokens": n_tokens,
-           "ppl": ppl, "mean_nll": total / count, "time_s": time.perf_counter() - t0}
+           "dtype": args.dtype, "quantization": args.quantization, "ppl": ppl, "mean_nll": total / count, "time_s": time.perf_counter() - t0}
     append_jsonl(args.out, row)
+    args.windows_out.mkdir(parents=True, exist_ok=True)
+    tag = (f"{args.backend}_{args.size}_{args.precision}" + ("" if args.dtype == "auto" else f"_{args.dtype}")
+           + (f"_{args.quantization}" if args.quantization else ""))
+    bucket = 128   # mean NLL by position in the window shows whether errors grow with context length
+    by_pos = [sum(t[i] for t in per_token for i in range(b, min(b + bucket, len(t)))) /
+              sum(max(0, min(b + bucket, len(t)) - b) for t in per_token) for b in range(0, args.seqlen - 1, bucket)]
+    (args.windows_out / f"{tag}.json").write_text(json.dumps(
+        {"window_nll": [sum(t) / len(t) for t in per_token], "position_bucket": bucket, "position_nll": by_pos}))
     print(row)
     if args.backend == "vllm":
         # vLLM's engine teardown can abort the interpreter; the result is already on disk.

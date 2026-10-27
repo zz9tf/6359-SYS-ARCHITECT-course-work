@@ -1,0 +1,36 @@
+\section{Introduction}
+\label{sec:intro}
+
+Language models keep growing, from GPT-2's 1.5B parameters (2019) to GPT-3's 175B (2020) and
+DeepSeek-V3's 671B (2024). Memory is the first wall a deployment hits: the BF16 weights of a
+7B-parameter model alone take 15\,GB, and the KV cache of every concurrent request comes on top.
+Quantization stores the weights (and sometimes the activations) in 8 or 4 bits, and is usually
+advertised with its nominal ratio: $2\times$ smaller for INT8, $4\times$ for INT4.
+
+Smaller is not automatically faster. Low-bit weights must be dequantized before the tensor cores
+can use them. A speedup exists only if a kernel hides that work, and the bytes saved matter only
+when the GPU is waiting on memory rather than on arithmetic. Whether quantization pays off
+therefore depends on the batch size, the prompt length and above all the software that runs it.
+This project measures that trade-off end to end on a current consumer GPU, an NVIDIA RTX 5090,
+and answers four questions:
+\begin{itemize}
+\item \textbf{Q1 (memory).} How much does quantization reduce the actual inference-time GPU memory,
+  compared with its theoretical weight compression?
+\item \textbf{Q2 (speed).} How do TTFT, decode latency (TPOT) and throughput change?
+\item \textbf{Q3 (crossover).} At which batch sizes and prompt lengths does a lower-bit format
+  become faster---or slower---than BF16?
+\item \textbf{Q4 (quality).} How much perplexity and task accuracy does it cost?
+\end{itemize}
+
+\noindent\textbf{Contributions.}
+(1) A reproducible measurement harness (\texttt{quantbench}) that records memory, latency,
+throughput, energy and quality for eight configurations on two backends (Hugging Face
+Transformers with bitsandbytes, and vLLM with Marlin/CUTLASS kernels) and three model sizes,
+about \NumMeasurements{} timed runs in total.
+(2) Evidence that the kernel matters more than the bit-width: at batch size 1 the same 4-bit weights
+are \NFslowdown{} slower than BF16 under bitsandbytes NF4 but \AWQspeedup{} faster under Marlin.
+(3) A kernel-level explanation of the crossover from microbenchmarks, a measured roofline and
+per-step profiles, which locates the batch size where each format stops paying off.
+(4) Memory and quality results showing that the nominal ratio overstates the real saving, and
+that a quantized larger model beats a full-precision smaller one at the same memory budget.
+We end with a decision guide (\cref{sec:discussion}). Code, raw measurements and figures are public.

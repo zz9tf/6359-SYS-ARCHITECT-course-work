@@ -1,0 +1,48 @@
+\section{Background}
+\label{sec:background}
+
+\subsection{Two phases of LLM inference}
+Autoregressive generation runs in two phases with very different hardware behavior.
+In \emph{prefill}, all $L$ prompt tokens of each of the $B$ requests pass through the network at
+once, so every linear layer is a GEMM with $M = B\cdot L$ rows. Its cost determines the
+\emph{time to first token} (TTFT). In \emph{decode}, every step produces one new token per
+request, so the same weights are multiplied by a matrix with only $M = B$ rows. Its cost per step
+is the \emph{time per output token} (TPOT). The keys and values of all previous tokens are kept in
+a KV cache whose size grows with $B\cdot(L+N)$ for $N$ generated tokens.
+
+\subsection{A roofline view of quantization}
+For a linear layer $y = xW^\top$ with $x\in\mathbb{R}^{M\times K}$ and $W\in\mathbb{R}^{N\times K}$
+stored with $b$ bytes per weight, the arithmetic intensity is
+\begin{equation}
+  I(M) \;=\; \frac{2MNK}{b\,NK + 2MK + 2MN} \;\approx\; \frac{2M}{b}\quad (M \ll N, K).
+  \label{eq:intensity}
+\end{equation}
+A kernel is memory-bound while $I(M)$ is below the GPU's ridge point
+$P_{\text{peak}}/BW$ and compute-bound above it~\cite{williams2009roofline}. With BF16 weights
+($b=2$), decode at small $B$ is deeply memory-bound: a step costs roughly the time needed to read
+every weight once. Storing weights in 4 bits ($b\approx0.5$) cuts these bytes by about $4\times$,
+which is the source of every decode-time speedup reported for weight-only quantization.
+Three things work against it. (i) The weights must be dequantized back to 16 bits before the
+tensor cores can use them, and this extra work is free only if a fused kernel hides it under the
+memory stream. (ii) Weight-only formats (W4A16, W8A16) still compute in BF16, so once $I(M)$
+reaches the ridge, at a $4\times$ smaller $M$ than BF16, the kernel is compute-bound and the
+dequantization overhead is no longer hidden. (iii) Prefill is compute-bound from the start, so
+weight-only formats cannot shorten TTFT. Formats that quantize the activations too (W8A8 in INT8
+or FP8~\cite{micikevicius2022fp8}) also raise the compute ceiling, because the tensor cores run
+8-bit math at twice the BF16 rate.
+
+\subsection{Quantization methods studied}
+\textbf{LLM.int8()}~\cite{dettmers2022llmint8} quantizes weights per output row and activations per
+token to INT8. Activation feature columns that contain any value above a threshold (6.0) are
+treated as outliers and multiplied in FP16 (mixed-precision decomposition).
+\textbf{NF4}~\cite{dettmers2023qlora} stores weights in the 4-bit NormalFloat format with one
+FP32 absmax scale per 64-weight block. Both are implemented in bitsandbytes and applied
+to the BF16 checkpoint at load time through Hugging Face Transformers~\cite{hfbnb}.
+\textbf{GPTQ}~\cite{frantar2023gptq} uses approximate second-order information to choose rounding
+that minimizes each layer's output error. \textbf{AWQ}~\cite{lin2024awq} instead rescales the
+weight channels that matter most for the activations before rounding. Both produce INT4 (or INT8)
+weights with one FP16 scale per group of 128 weights, and are executed in vLLM~\cite{kwon2023vllm}
+by the Marlin mixed-precision GEMM kernels~\cite{frantar2025marlin}. \textbf{FP8 W8A8} casts
+the weights to E4M3 at load time with one scale per tensor and quantizes the activations
+dynamically per token; vLLM runs it with CUTLASS FP8 GEMMs. SmoothQuant~\cite{xiao2023smoothquant} motivates the W8A8 design by moving
+activation outliers into the weights; we use FP8 as its hardware-native counterpart on Blackwell.

@@ -1,0 +1,2 @@
+{"start": "2026-10-26T20:28:54", "end": "2026-10-26T20:43:31", "job": "029-042 (runner without guard)", "foreign_pids": "34197"}
+{"start": "2026-10-27T00:14:30", "end": "2026-10-27T00:25:40", "job": "050_serve_7b_bf16 (guard fired, runner stalled)", "foreign_pids": "unknown"}

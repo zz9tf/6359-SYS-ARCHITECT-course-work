@@ -1,0 +1,2 @@
+name, driver_version, vbios_version, pcie.link.gen.max, pcie.link.width.max, memory.total [MiB], power.limit [W], clocks.max.sm [MHz], clocks.max.memory [MHz]
+NVIDIA GeForce RTX 5090, 595.91.07, 98.02.4F.00.05, 5, 16, 32607 MiB, 575.00 W, 3090 MHz, 14001 MHz

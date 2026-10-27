@@ -1,0 +1,7 @@
+Linux 6.8.1-1062-realtime #63-Ubuntu SMP PREEMPT_RT Wed Sep 30 13:49:30 UTC 2026 x86_64 GNU/Linux
+Ubuntu 24.04.5 LTS
+CPU(s):                                  24
+Model name:                              Intel(R) Core(TM) Ultra 9 285K
+CPU(s) scaling MHz:                      61%
+               total        used        free      shared  buff/cache   available
+Mem:              62           5           0           0          56          56

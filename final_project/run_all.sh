@@ -21,10 +21,16 @@ for p in awq-int4 gptq-int4 gptq-int8 fp8; do
   python scripts/vllm_sweep.py --size 14b --precision $p --batch-sizes 1,4,16,64 --input-lens 512,2048
 done
 python scripts/vllm_sweep.py --size 14b --precision bf16 --gpu-util 0.95 --batch-sizes 1,4,16,64 --input-lens 512,2048
+for p in bf16 nf4 int8; do
+  python scripts/hf_sweep.py --size 14b --precision $p --batch-sizes 1,4,16,64 --input-lens 512,2048
+done
 # output-length sub-sweep (Q2)
 for p in bf16 int8 nf4; do
   python scripts/hf_sweep.py --size 7b --precision $p --input-lens 512 --batch-sizes 1,16 --output-lens 32,512 --tag outlen
 done
+for p in bf16 awq-int4 fp8 gptq-int8; do for n in 32 512; do
+  python scripts/vllm_sweep.py --size 7b --precision $p --input-lens 512 --batch-sizes 1,16 --output-len $n --tag outlen
+done; done
 
 # 2. Mechanism: linear-layer kernels and per-step profile (Q3)
 python scripts/kernel_bench.py --size 7b
@@ -49,6 +55,18 @@ for p in fp8 gptq-int8 awq-int4 gptq-int4; do
   python scripts/eval_ppl.py --backend vllm --size 14b --precision $p
   python scripts/eval_gsm8k.py --backend vllm --size 14b --precision $p
 done
+python scripts/eval_ppl.py --backend hf --size 14b --precision bf16
+python scripts/eval_gsm8k.py --backend hf --size 14b --precision bf16 --batch 8
+for p in nf4 int8; do
+  python scripts/eval_ppl.py --backend hf --size 14b --precision $p
+  python scripts/eval_gsm8k.py --backend hf --size 14b --precision $p --batch 32
+done
+# Diagnosing the 14B GPTQ-INT4 perplexity outlier: activation dtype, and next-token ranking on raw vs chat text
+python scripts/eval_ppl.py --backend vllm --size 14b --precision gptq-int4 --dtype bfloat16 --out results/quality_ppl_diag.jsonl
+for s in 14b 7b; do for p in gptq-int4 awq-int4 gptq-int8 fp8; do
+  python scripts/diag_ppl_topk.py --size $s --precision $p
+  python scripts/diag_ppl_topk.py --size $s --precision $p --corpus gsm8k-chat --windows 400
+done; done
 
 # 5. Figures and tables
 python scripts/make_figures.py
