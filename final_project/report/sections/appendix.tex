@@ -88,7 +88,13 @@ the 28-layer 7B model.
 \section{Real-traffic details}
 \label{app:real}
 
-\Cref{tab:serving_main} summarizes the ShareGPT replay of \cref{sec:real}. \Cref{fig:workload} shows
+\Cref{tab:serving_main} summarizes the ShareGPT replay of \cref{sec:real}. The HF and vLLM numbers
+compare deployment stacks, not formats, and are timed differently. vLLM is measured by
+\texttt{vllm bench serve} at the client, after 8 warm-up requests; its TTFT includes the server's
+queueing and HTTP overhead. HF has no warm-up, and its TTFT is the time from the start of a batch's
+\texttt{generate} call to its first token; it leaves out the time a request waits for earlier
+batches, which favors HF. Even so, HF's median TTFT is \SrvTTFThf\,ms against \SrvTTFTvlSixteen\,ms
+for vLLM. \Cref{fig:workload} shows
 the lengths of the 300 requests, and \cref{fig:serving,tab:serving} give the full serving results,
 including the 99th-percentile latencies.
 

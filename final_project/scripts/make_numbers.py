@@ -57,7 +57,8 @@ def main():
     runs = pd.concat([d[d.status == "ok"] for d in (A.raw("hf_sweep.jsonl"), A.raw("vllm_sweep.jsonl")) if not d.empty])
     put("NumMeasurements", f"{len(runs):,}".replace(",", "{,}"))
     cv = runs.groupby(A.KEYS).e2e_s.agg(lambda s: s.std() / s.mean() * 100).dropna()
-    put("CVmax", cv.quantile(0.95), "{:.1f}")
+    put("CVmax", cv.quantile(0.95), "{:.1f}")      # 95th percentile over cells
+    put("CVabsmax", cv.max(), "{:.1f}")             # worst cell
     put("CVmed", cv.median(), "{:.1f}")
     put("ClockAvg", runs.avg_sm_clock_mhz.mean(), "{:.0f}")
 

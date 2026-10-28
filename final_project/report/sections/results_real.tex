@@ -2,7 +2,7 @@
 In a replay of 300 ShareGPT requests (\cref{tab:serving_main} in \cref{app:real}), AWQ-INT4 gives the lowest TPOT with
 one client (\SrvTPOTawqOne\,ms vs.\ \SrvTPOTbfOne\,ms for BF16), and FP8 the highest throughput with 64
 clients (\SrvThrFP{} vs.\ \SrvThrBF{} tokens/s), as the crossover of \cref{sec:q3} predicts. With the
-same 16 requests in flight, vLLM BF16 delivers \SrvGap{} the throughput of HF BF16, whose static
-batches wait for their longest prompt and longest answer (median TTFT \SrvTTFThf\,ms vs.\
-\SrvTTFTvlSixteen\,ms with continuous batching~\cite{yu2022orca}).
+same 16 requests in flight, vLLM BF16 delivers \SrvGap{} the throughput of HF BF16. Both run BF16, so
+this gap belongs to the serving stack (continuous~\cite{yu2022orca} vs.\ static batching, CUDA
+graphs), not to quantization; the two stacks are also timed differently (\cref{app:real}).
 

@@ -37,8 +37,8 @@ the natural next step.
 \label{sec:conclusion}
 On one consumer GPU, the bit-width alone predicts neither the memory a quantization format saves,
 nor its speed, nor its quality cost. Memory savings are real but smaller than advertised. Speed
-depends on the kernel and the regime: fused weight-only kernels win at small batches, FP8 at every
-batch size. Quality costs grow as bits and model size shrink, yet a larger 4-bit model beats a smaller
+depends on the implementation and the regime: fused weight-only kernels win at small batches, FP8 at
+every batch size. Quality costs grow as bits and model size shrink, yet a larger 4-bit model beats a smaller
 16-bit one. Smaller is not always faster, but with the right kernel in the right regime, it is both.
 
 \section*{Author contributions}

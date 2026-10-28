@@ -34,8 +34,8 @@ explain the results with kernel benchmarks, a measured roofline and GPU profiles
 \includegraphics[width=\linewidth]{teaser_speedup}
 \caption{\textbf{The bit-width does not predict the speedup.} (a)~Decode speedup over BF16 at batch
 size~1 against the weight memory each format saves (Qwen2.5-7B, 512-token prompts). If decode time
-were set only by the bytes read, every point would lie on the dashed line; vLLM's kernels come close,
-bitsandbytes does not. (b)~As the batch grows, weight-only formats lose their gain; FP8 keeps it.}
+were set only by the bytes read, every point would lie on the dashed line; the vLLM stack comes close,
+the HF + bitsandbytes stack does not. (b)~As the batch grows, weight-only formats lose their gain; FP8 keeps it.}
 \label{fig:teaser}
 \end{figure}
 
@@ -43,7 +43,7 @@ bitsandbytes does not. (b)~As the batch grows, weight-only formats lose their ga
 \item \textbf{Memory (Q1, \cref{sec:q1}).} 4-bit weights shrink Qwen2.5-7B by
   \WtNFSeven--\WtAWQSeven, not $4\times$, and the total saving drops to \MemBigNF{} with many tokens
   in flight. On vLLM the saved memory becomes KV cache (\KVratioAWQ{} more tokens).
-\item \textbf{Speed (Q2, \cref{sec:q2}).} The kernel decides the speedup (\cref{fig:teaser}a): at
+\item \textbf{Speed (Q2, \cref{sec:q2}).} The implementation decides the speedup (\cref{fig:teaser}a): at
   batch size~1, vLLM's kernels turn \IdealAWQ--\IdealGQE\% of the byte saving into speed, NF4 only
   \IdealNF\%, and LLM.int8() is \INTeightslowdown{} slower than BF16.
 \item \textbf{Crossover (Q3, \cref{sec:q3,sec:mechanism}).} Weight-only formats lose their speedup

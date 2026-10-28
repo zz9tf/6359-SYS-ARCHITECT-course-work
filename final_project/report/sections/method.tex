@@ -51,7 +51,7 @@ model's chat template, and Qwen3 runs in non-thinking mode.
 
 \textbf{Metrics and statistics.} TTFT is the time to the first output token, TPOT the mean time of
 each later token, and throughput the number of output tokens per second. Each cell has one warm-up and
-three measured runs with fresh prompts; run-to-run variation stays below \CVmax\% in 95\% of the
-cells. Memory and energy come from PyTorch and NVML. For quality, all configurations answer the same
+three measured runs with fresh prompts; the run-to-run variation of the end-to-end time is below
+\CVmax\% in 95\% of the cells and \CVabsmax\% at most. Memory and energy come from PyTorch and NVML. For quality, all configurations answer the same
 questions, so we compare each with HF BF16 by an exact McNemar test, with a Bonferroni correction over
 the \MNumTests{} comparisons of each benchmark ($\alpha=\BonfAlpha$).

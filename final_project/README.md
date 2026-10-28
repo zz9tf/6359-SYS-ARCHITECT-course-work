@@ -229,7 +229,7 @@ final_project/
 │   ├── diag_ppl_topk.py   next-token ranking on raw vs chat text (perplexity-outlier diagnosis)
 │   └── make_figures.py · make_tables.py · make_numbers.py · make_readme.py
 ├── results/               raw measurements (*.jsonl), serving results, summaries (CSV/Markdown), env info
-├── figures/               all figures (PDF for the report, PNG; slide versions in figures/slides/)
+├── figures/               all figures (PDF for the report, PNG for the slides and this README)
 ├── report/                LaTeX source (NeurIPS 2026 style) and PDF of the final report
 ├── slides/                final presentation (UTA template) and its build script
 └── proposal/              proposal slides and write-up
@@ -241,11 +241,12 @@ final_project/
 cd final_project
 uv venv .venv --python 3.12 && source .venv/bin/activate
 uv pip install -r requirements.txt
-./run_all.sh                         # every experiment, about twelve GPU-hours on an RTX 5090
+bash run_all.sh                      # every experiment, about twelve GPU-hours on an RTX 5090
 python scripts/make_figures.py       # figures/*.pdf|png
 python scripts/make_tables.py        # results/summary/* and report/tables/*
 python scripts/make_numbers.py       # report/numbers.tex (every number quoted in the report)
-cd report && tectonic main.tex       # report/main.pdf
+python scripts/make_readme.py        # key findings and result tables in this README
+(cd report && tectonic main.tex)     # report/main.pdf
 python slides/build_slides.py        # slides/final_presentation.pptx
 ```
 

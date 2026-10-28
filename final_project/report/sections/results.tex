@@ -55,7 +55,8 @@ On vLLM, fewer bytes do mean less time (\cref{fig:latency}b): AWQ-INT4 decodes \
 than BF16, GPTQ-INT8 \GPTQeightspeedup{} and FP8 \FPeightspeedup, which is \IdealAWQ--\IdealGQE\% of
 their byte savings. On HF the same idea fails: LLM.int8() is \INTeightslowdown{} slower than BF16, and
 NF4 is \NFsevenB{} faster on 7B (\NFfourteenB{} on 14B) but \NFthreeslow{} slower on 3B.
-\Cref{sec:mechanism} explains why.
+These are whole stacks: LLM.int8() and GPTQ-INT8 differ in method, activation path and engine, not
+only in kernel. \Cref{sec:mechanism} separates the kernels from the rest.
 
 \textbf{Prefill.} As P3 predicts, AWQ and GPTQ change the TTFT by at most \TTFTwoMax\%, and NF4 makes
 it \TTFTnfSlow{} slower, because bitsandbytes dequantizes every weight matrix first
