@@ -1,7 +1,7 @@
 \begin{table*}[t]
 \centering
 \footnotesize
-\caption{Q4 --- quality. WikiText-2 perplexity (2048-token windows), GSM8K accuracy (\%, 1,319 questions, zero-shot CoT, greedy) and MMLU accuracy (\%, 14,042 questions, zero-shot). Deltas are against HF BF16 of the same model; $p$ is the two-sided exact McNemar test of the paired answers against HF BF16.}
+\caption{Q4 --- quality. WikiText-2 perplexity (2048-token windows), GSM8K accuracy (\%, 1,319 questions, zero-shot CoT, greedy) and MMLU accuracy (\%, 14,042 questions, zero-shot). Deltas are against HF BF16 of the same model (Qwen3-32B has none: it does not fit the GPU in BF16); $p$ is the two-sided exact McNemar test of the paired answers against HF BF16.}
 \label{tab:quality}
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{llrrrrrrrr}
@@ -37,7 +37,9 @@ Qwen3-8B & HF BF16 & 9.73 & -- & 91.4 & -- & -- & 69.6 & -- & -- \\
  & vLLM BF16 & 9.72 & $0.00$ & 92.0 & $+0.6$ & 0.215 & 69.6 & $0.0$ & 0.610 \\
  & vLLM FP8 & 9.73 & $0.00$ & 91.8 & $+0.5$ & 0.488 & 68.9 & $-0.7$ & $<$0.001 \\
  & vLLM AWQ-4 & 10.18 & $+0.46$ & 91.1 & $-0.2$ & 0.818 & 68.9 & $-0.7$ & 0.003 \\
+Qwen3-32B & HF NF4 & 7.93 & -- & 92.6 & -- & -- & 79.4 & -- & -- \\
+ & vLLM AWQ-4 & 7.88$^{\S}$ & -- & 94.2 & -- & -- & 78.1 & -- & -- \\
 \bottomrule
 \end{tabular}
-\par\vspace{2pt}\parbox{\linewidth}{\scriptsize $^{\ddagger}$Degraded on raw text but not on chat-formatted text; see \cref{sec:q4}.}
+\par\vspace{2pt}\parbox{\linewidth}{\scriptsize $^{\ddagger}$Degraded on raw text but not on chat-formatted text; see \cref{sec:q4}. $^{\S}$BF16 activations: with the checkpoint's FP16 activations some 2048-token windows overflow (\cref{sec:general}).}
 \end{table*}

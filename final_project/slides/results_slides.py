@@ -297,9 +297,8 @@ def slide_general(prs, fig_dir):
     m = macros()
     if not fig.exists() or "FamRAWQone" not in m:
         return
-    s = U.content_slide(prs, "Does It Generalize? Qwen3-8B",
-                        f"Qwen3-8B ({m.get('FamRLayers')} layers, {m.get('FamRKVheads')} KV heads, non-thinking): "
-                        "the systems picture carries over",
+    s = U.content_slide(prs, "Does It Generalize? Qwen3-8B and 32B",
+                        "Qwen3-8B reproduces the systems picture; Qwen3-32B runs on this GPU only at 4 bits",
                         notes=("Qwen3-8B reproduces the decode speedups of AWQ and FP8 and the LLM.int8() slowdown within a few "
                                "percent. NF4 turns from a small gain into a loss because the 36-layer model is host-bound at "
                                "batch 1, exactly like the 36-layer Qwen2.5-3B."))
@@ -307,8 +306,10 @@ def slide_general(prs, fig_dir):
               f"Qwen3-8B vs Qwen2.5-7B; FP8 {m.get('FamRFPone')} vs {m.get('FamQFPone')}"),
              (m.get("FamRNFone", "n/a"), "NF4 at B=1 on Qwen3-8B",
               f"{m.get('FamRLayers')} layers \u2192 host-bound, as on Qwen2.5-3B"),
-             (f"{m.get('FamKVratio')}", "KV-cache bytes per token vs Qwen2.5-7B",
-              "B=256 overflows the cache in every format")]
+             (f"{m.get('BigMMLUawq', '?')}% vs {m.get('SmallMMLUbf', '?')}%", "MMLU: 32B AWQ-INT4 vs 8B BF16",
+              f"{m.get('BigAWQw', '?')} vs {m.get('SmallBFw', '?')} GB; BF16 32B needs {m.get('BigBFw', '?')} GB")]
+    if "BigMMLUawq" not in m:
+        tiles[2] = (f"{m.get('FamKVratio')}", "KV-cache bytes per token vs Qwen2.5-7B", "B=256 overflows the cache in every format")
     figure_with_tiles_below(s, fig, tiles, alt="Decode speedup and MMLU change for Qwen2.5-7B and Qwen3-8B")
 
 

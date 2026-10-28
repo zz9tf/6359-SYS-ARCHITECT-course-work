@@ -14,12 +14,14 @@ BASE = {
     "14b": "Qwen/Qwen2.5-14B-Instruct",
     # second model family, used to check that the conclusions carry over (run in non-thinking mode)
     "q3-8b": "Qwen/Qwen3-8B",
+    # 32B fits a 32 GB GPU only at 4 bits (BF16 65 GB, FP8/INT8 about 33 GB)
+    "q3-32b": "Qwen/Qwen3-32B",
 }
 
-MODEL_LABEL = {"3b": "Qwen2.5-3B", "7b": "Qwen2.5-7B", "14b": "Qwen2.5-14B", "q3-8b": "Qwen3-8B"}
+MODEL_LABEL = {"3b": "Qwen2.5-3B", "7b": "Qwen2.5-7B", "14b": "Qwen2.5-14B", "q3-8b": "Qwen3-8B", "q3-32b": "Qwen3-32B"}
 
 # pre-quantized checkpoints published for each model (Qwen3-8B has no official GPTQ release)
-VLLM_AVAILABLE = {"q3-8b": ["bf16", "fp8", "awq-int4"]}
+VLLM_AVAILABLE = {"q3-8b": ["bf16", "fp8", "awq-int4"], "q3-32b": ["awq-int4"]}
 
 HF_PRECISIONS = ["bf16", "int8", "nf4"]
 

@@ -96,6 +96,15 @@ for p in bf16 nf4 int8; do
   python scripts/eval_mmlu.py --backend hf --size q3-8b --precision $p --batch $([ $p = int8 ] && echo 8 || echo 16)
 done
 
+# Qwen3-32B: BF16 (65 GB), FP8 and INT8 (about 33 GB) do not fit the 32 GB GPU; only 4-bit formats run
+python scripts/vllm_sweep.py --size q3-32b --precision awq-int4 --batch-sizes 1,4,16,64 --input-lens 512,2048 --gpu-util 0.92
+for t in eval_ppl eval_gsm8k eval_mmlu; do python scripts/$t.py --backend vllm --size q3-32b --precision awq-int4; done
+python scripts/hf_sweep.py --size q3-32b --precision nf4 --batch-sizes 1,4,16 --input-lens 512
+python scripts/hf_sweep.py --size q3-32b --precision nf4 --batch-sizes 1,4 --input-lens 2048
+python scripts/eval_ppl.py --backend hf --size q3-32b --precision nf4
+python scripts/eval_gsm8k.py --backend hf --size q3-32b --precision nf4 --batch 32
+python scripts/eval_mmlu.py --backend hf --size q3-32b --precision nf4 --batch 8
+
 # 6. Figures and tables
 python scripts/make_figures.py
 python scripts/make_tables.py

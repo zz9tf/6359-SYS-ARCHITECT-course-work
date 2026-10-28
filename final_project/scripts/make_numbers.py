@@ -620,6 +620,46 @@ def main():
     else:
         put("FamQualitySentence", "")
 
+    # ------------------------------------------------------------------ Qwen3-32B: runs only at 4 bits
+    l32 = vl_load[(vl_load["size"] == "q3-32b") & (vl_load.precision == "awq-int4")] if not vl_load.empty else vl_load
+    if len(l32):
+        put("BigAWQw", float(l32.load_gib.iloc[0]) * 2**30 / 1e9, "{:.1f}")
+        put("BigAWQkv", f"{float(l32.kv_cache_tokens.iloc[0]) / 1e3:.0f}K")
+        put("BigBFw", A.param_breakdown("q3-32b").total * 2 / 1e9, "{:.0f}")   # BF16 bytes; never loadable here
+        h8 = hfw.loc[("q3-8b", "bf16")].weights_bytes / 1e9 if ("q3-8b", "bf16") in hfw.index else float("nan")
+        put("SmallBFw", h8, "{:.1f}")
+        if ("q3-32b", "nf4") in hfw.index:
+            put("BigNFw", hfw.loc[("q3-32b", "nf4")].weights_bytes / 1e9, "{:.1f}")
+        put("BigAWQtpot", cell("vllm", "q3-32b", "awq-int4", 1, 512, "tpot") * 1e3, "{:.1f}")
+        put("SmallBFtpot", cell("vllm", "q3-8b", "bf16", 1, 512, "tpot") * 1e3, "{:.1f}")
+        put("BigNFtpot", cell("hf", "q3-32b", "nf4", 1, 512, "tpot") * 1e3, "{:.1f}")
+        put("SmallBFtpotHF", cell("hf", "q3-8b", "bf16", 1, 512, "tpot") * 1e3, "{:.1f}")
+        for bench, bt in (("gsm8k", "G"), ("mmlu", "M")):
+            for p_, b_, pn in (("awq-int4", "vllm", "AWQ"), ("nf4", "hf", "NF")):
+                t = A.paired(bench, ("hf", "q3-8b", "bf16"), (b_, "q3-32b", p_))
+                if t:
+                    put(f"Big{bt}{pn}", sg(t["delta_pp"]))
+                    put(f"Big{bt}{pn}p", "$p<0.001$" if t["p_value"] < 0.001 else f"$p={t['p_value']:.3f}$")
+        acc_m = A.mmlu().set_index(["backend", "size", "precision"]).accuracy * 100 if not A.mmlu().empty else {}
+        put("BigMMLUawq", float(acc_m.get(("vllm", "q3-32b", "awq-int4"), float("nan"))) if len(acc_m) else float("nan"), "{:.1f}")
+        put("SmallMMLUbf", float(acc_m.get(("hf", "q3-8b", "bf16"), float("nan"))) if len(acc_m) else float("nan"), "{:.1f}")
+        put("BigGSMawq", g("vllm", "q3-32b", "awq-int4"), "{:.1f}")
+        put("SmallGSMbf", g("hf", "q3-8b", "bf16"), "{:.1f}")
+        put("BigPPLawq", q("vllm", "q3-32b", "awq-int4"), "{:.2f}")
+        put("SmallPPLbf", q("hf", "q3-8b", "bf16"), "{:.2f}")
+        wn = A.ppl_windows("vllm_q3-32b_awq-int4").get("window_nll", [])
+        if wn:
+            bad = [v for v in wn if not math.isfinite(v)]
+            put("BigNaNwin", f"{len(bad)} of {len(wn)}")
+        tg = A.paired("gsm8k", ("hf", "q3-8b", "bf16"), ("vllm", "q3-32b", "awq-int4"))
+        tm = A.paired("mmlu", ("hf", "q3-8b", "bf16"), ("vllm", "q3-32b", "awq-int4"))
+        w32 = float(l32.load_gib.iloc[0]) * 2**30 / 1e9
+        if tg and tm:
+            both = tg["delta_pp"] > 0 and tm["delta_pp"] > 0 and tg["p_value"] < 0.05 and tm["p_value"] < 0.05
+            put("BigVerdict", (f"A model four times larger, in {w32 / h8:.2f}$\\times$ the weight memory, is significantly "
+                               "better on both benchmarks; on this GPU, that model exists only because of quantization.")
+                if both else "The larger 4-bit model is not uniformly better, so the choice must be checked per task.")
+
     def tex_safe(v):
         return re.sub(r"(?<!\\)%", r"\\%", str(v))   # a bare % would comment out the closing brace
 

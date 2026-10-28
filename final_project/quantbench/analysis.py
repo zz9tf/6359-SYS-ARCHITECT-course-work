@@ -140,8 +140,18 @@ def quality():
     ppl = raw("quality_ppl.jsonl")
     gsm = raw("quality_gsm8k.jsonl")
     if not ppl.empty:
-        if "dtype" in ppl:  # runs with a forced activation dtype are diagnostics, see ppl_dtype_variants()
-            ppl = ppl[ppl["dtype"].isna() | (ppl["dtype"] == "auto")]
+        ppl = ppl[np.isfinite(ppl.ppl)]
+        if "dtype" in ppl:
+            # runs with a forced activation dtype are diagnostics (ppl_diag), except where the checkpoint's own
+            # dtype gives no finite result: then the forced-dtype run stands in and is flagged in `dtype_used`
+            forced = ppl["dtype"].notna() & (ppl["dtype"] != "auto")
+            if "quantization" in ppl:
+                forced &= ppl["quantization"].isna()
+            auto = ppl[~forced].assign(dtype_used="auto")
+            keys = set(zip(auto.backend, auto["size"], auto.precision))
+            missing = np.array([k not in keys for k in zip(ppl.backend, ppl["size"], ppl.precision)], dtype=bool)
+            sub = ppl[forced.to_numpy() & missing]
+            ppl = pd.concat([auto, sub.assign(dtype_used=sub["dtype"])], ignore_index=True)
         ppl = ppl.drop_duplicates(["backend", "size", "precision"], keep="last")
     if not gsm.empty:
         gsm = gsm.drop_duplicates(["backend", "size", "precision"], keep="last")

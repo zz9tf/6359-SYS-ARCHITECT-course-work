@@ -543,7 +543,11 @@ def fig_generalization():
     if not fr:
         return
     cfg = [("awq-int4", "AWQ-INT4\n(vLLM)"), ("fp8", "FP8\n(vLLM)"), ("nf4", "NF4\n(HF)"), ("int8", "LLM.int8()\n(HF)")]
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.0, 3.0))
+    mm = A.mmlu()
+    big = mm[mm["size"] == "q3-32b"] if not mm.empty else mm
+    ncol = 3 if len(big) else 2
+    fig, axes = plt.subplots(1, ncol, figsize=(4.5 * ncol, 3.0))
+    ax1, ax2 = axes[0], axes[1]
     x = np.arange(len(cfg))
     for ax, key, yl, title in ((ax1, "tpot_b1_{}", "decode speedup over BF16", "(a) Decode speedup, B = 1"),
                                (ax2, "d_mmlu_{}", "MMLU change (points)", "(b) MMLU change vs BF16")):
@@ -567,6 +571,49 @@ def fig_generalization():
     vals = [v for v in vals if not np.isnan(v)]
     ax2.set_ylim(min(min(vals), -1) * 1.45, max(max(vals), 0.3) * 1.8)
     ax1.legend(loc="upper right", frameon=False)
+    if ncol == 3:   # (c) the Qwen3 family by weight memory: does a 4-bit 32B beat a 16-bit 8B?
+        ax3 = axes[2]
+        hf, vl = A.loads()
+
+        def mem(b, size, p):
+            if b == "hf":
+                r = hf[(hf["size"] == size) & (hf.precision == p)]
+                return r.weights_bytes.iloc[0] / A.GB if len(r) else np.nan
+            r = vl[(vl["size"] == size) & (vl.precision == p)]
+            return r.load_gib.iloc[0] * A.GIB / A.GB if len(r) else np.nan
+
+        fam = mm[mm["size"].isin(["q3-8b", "q3-32b"])]
+        fam = fam[~((fam.backend == "vllm") & (fam.precision == "bf16"))]
+        for size, lab in (("q3-8b", "8B"), ("q3-32b", "32B")):
+            g = fam[fam["size"] == size].copy()
+            g["mem"] = [mem(b, size, p) for b, p in zip(g.backend, g.precision)]
+            g = g.dropna(subset=["mem"]).sort_values("mem")
+            ax3.plot(g["mem"], g.accuracy * 100, color=S.GRID, lw=1.2, zorder=1)
+            for _, r in g.iterrows():
+                st = S.style(r.backend, r.precision)
+                ax3.plot(r["mem"], r.accuracy * 100, marker=st["marker"], color=st["color"], ls="none", ms=6.5 * FS,
+                         markerfacecolor=st["markerfacecolor"], markeredgecolor=st["markeredgecolor"], zorder=3)
+            if len(g):
+                ax3.annotate(f"Qwen3-{lab}", (g["mem"].iloc[-1], g.accuracy.iloc[-1] * 100), xytext=(6, 0),
+                             textcoords="offset points", fontsize=8 * FS, fontweight="bold", color=S.INK2, va="center")
+        ax3.axvline(32, color=S.INK2, lw=0.8, ls=":")
+        ax3.text(33, ax3.get_ylim()[0], "GPU\n32 GB", ha="left", va="bottom", fontsize=7 * FS, color=S.INK2)
+        bf32 = A.param_breakdown("q3-32b").total * 2 / A.GB
+        y0, y1 = ax3.get_ylim()
+        ym = y0 + 0.5 * (y1 - y0)
+        ax3.annotate(f"32B in BF16:\n{bf32:.0f} GB, does not fit", xy=(39, ym), xytext=(30, ym),
+                     ha="right", va="center", fontsize=7 * FS, color=S.INK2,
+                     arrowprops=dict(arrowstyle="-|>", color=S.INK2, lw=0.8))
+        marks = [Line2D([], [], **{**S.style(b, p), "linestyle": "none"}) for b, p in
+                 (("hf", "bf16"), ("hf", "int8"), ("hf", "nf4"), ("vllm", "fp8"), ("vllm", "awq-int4"))]
+        ax3.legend(handles=marks, loc="center left", frameon=False, fontsize=6.5 * FS, handletextpad=0.3)
+        ax3.set_xscale("log", base=2)
+        ax3.set_xticks([4, 8, 16, 32])
+        ax3.set_xticklabels(["4", "8", "16", "32"])
+        ax3.set_xlim(3, 40)
+        ax3.set_xlabel("weight memory (GB, log scale)")
+        ax3.set_ylabel("MMLU accuracy (%)")
+        ax3.set_title("(c) Qwen3: 4-bit 32B vs 16-bit 8B")
     fig.tight_layout()
     save(fig, "general_qwen3")
 

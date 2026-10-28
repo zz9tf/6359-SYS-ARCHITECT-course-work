@@ -36,7 +36,7 @@ def slide_title(prs):
 
 def slide_setup(prs, facts):
     s = U.content_slide(prs, "What We Measured",
-                        "2 backends × 8 configurations × 4 models (Qwen2.5-3B/7B/14B, Qwen3-8B) on one GPU",
+                        "2 backends × 8 configurations × 5 models (Qwen2.5-3B/7B/14B, Qwen3-8B/32B) on one GPU",
                         notes="Hardware, the eight configurations, the workloads and how we time things.")
     x0, w = 0.5, 2.9
     # platform card
@@ -48,7 +48,7 @@ def slide_setup(prs, facts):
         [("Measured: ", {"bold": True, "color": U.NAVY}), (f"{facts['bw']:.2f} TB/s DRAM, {facts['bf16']:.0f} TFLOP/s BF16"
                                                            + (f", {facts['fp8']:.0f} TFLOP/s FP8" if facts.get('fp8') else ""), {})],
         [("Software: ", {"bold": True, "color": U.NAVY}), ("PyTorch 2.13, Transformers 5.19, bitsandbytes 0.50, vLLM 0.32", {})],
-        [("Models: ", {"bold": True, "color": U.NAVY}), ("Qwen2.5-3B / 7B / 14B-Instruct; Qwen3-8B as a second family", {})],
+        [("Models: ", {"bold": True, "color": U.NAVY}), ("Qwen2.5-3B / 7B / 14B-Instruct; Qwen3-8B and 32B (4-bit only)", {})],
     ], size=9.5, space_after=4)
     # configs card (two columns)
     x1, w1 = x0 + w + 0.15, 9.5 - (x0 + w + 0.15)

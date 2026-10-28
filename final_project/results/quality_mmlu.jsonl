@@ -27,3 +27,5 @@
 {"timestamp": "2026-10-27T21:28:40", "backend": "hf", "size": "q3-8b", "precision": "int8", "n": 14042, "accuracy": 0.7030337558752314, "n_correct": 9872, "time_s": 222.2210958579999}
 {"timestamp": "2026-10-27T22:24:44", "backend": "hf", "size": "14b", "precision": "nf4", "n": 14042, "accuracy": 0.7639225181598063, "n_correct": 10727, "time_s": 428.89493590700295}
 {"timestamp": "2026-10-27T22:32:11", "backend": "hf", "size": "14b", "precision": "int8", "n": 14042, "accuracy": 0.7662726107392109, "n_correct": 10760, "time_s": 442.930411415}
+{"timestamp": "2026-10-28T03:00:00", "backend": "vllm", "size": "q3-32b", "precision": "awq-int4", "n": 14042, "accuracy": 0.7813701751887195, "n_correct": 10972, "time_s": 690.5086136040045}
+{"timestamp": "2026-10-28T03:57:48", "backend": "hf", "size": "q3-32b", "precision": "nf4", "n": 14042, "accuracy": 0.7935479276456345, "n_correct": 11143, "time_s": 923.6043606710009}

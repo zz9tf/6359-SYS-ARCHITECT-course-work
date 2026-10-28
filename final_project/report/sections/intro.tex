@@ -26,7 +26,7 @@ and answers four questions:
 (1) A reproducible measurement harness (\texttt{quantbench}) that records memory, latency,
 throughput, energy and quality for eight configurations on two backends (Hugging Face
 Transformers with bitsandbytes, and vLLM with Marlin/CUTLASS kernels), three model sizes and a
-second model family (Qwen3-8B),
+second model family (Qwen3-8B, and Qwen3-32B, which fits the GPU only at 4 bits),
 about \NumMeasurements{} timed runs in total.
 (2) Evidence that the kernel matters more than the bit-width: at batch size 1 the 7B model's 8-bit
 weights decode \GPTQeightspeedup{} faster than BF16 under vLLM's Marlin kernel but

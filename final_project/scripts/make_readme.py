@@ -56,6 +56,10 @@ def main():
 8. **The results carry over to Qwen3-8B.** AWQ-INT4 decodes {m.get('FamRAWQone', '?')} faster at batch 1 (Qwen2.5-7B:
    {m.get('FamQAWQone', '?')}), FP8 {m.get('FamRFPone', '?')}, LLM.int8() runs at {m.get('FamRINTone', '?')}; NF4 is {m.get('FamRNFone', '?')} on the
    36-layer model, again because the decode step is host-bound.
+9. **Quantization makes a 32B model possible.** Qwen3-32B needs {m.get('BigBFw', '?')} GB in BF16 and runs on this GPU only at
+   4 bits: AWQ-INT4 takes {m.get('BigAWQw', '?')} GB, decodes at {m.get('BigAWQtpot', '?')} ms/token (Qwen3-8B BF16: {m.get('SmallBFtpot', '?')} ms)
+   and scores {m.get('BigGSMawq', '?')}% / {m.get('BigMMLUawq', '?')}% on GSM8K / MMLU against {m.get('SmallGSMbf', '?')}% / {m.get('SmallMMLUbf', '?')}% for
+   Qwen3-8B in BF16 ({m.get('SmallBFw', '?')} GB).
 """
     results = f"""## Results at a glance
 

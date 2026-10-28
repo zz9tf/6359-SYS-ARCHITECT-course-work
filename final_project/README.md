@@ -35,6 +35,10 @@ CSE 6359 Advanced Topics in Systems & Architecture — Final Project, Fall 2026
 8. **The results carry over to Qwen3-8B.** AWQ-INT4 decodes 2.33× faster at batch 1 (Qwen2.5-7B:
    2.44×), FP8 1.54×, LLM.int8() runs at 0.28×; NF4 is 0.90× on the
    36-layer model, again because the decode step is host-bound.
+9. **Quantization makes a 32B model possible.** Qwen3-32B needs 66 GB in BF16 and runs on this GPU only at
+   4 bits: AWQ-INT4 takes 19.6 GB, decodes at 13.3 ms/token (Qwen3-8B BF16: 10.3 ms)
+   and scores 94.2% / 78.1% on GSM8K / MMLU against 91.4% / 69.6% for
+   Qwen3-8B in BF16 (16.4 GB).
 <!-- /KEY-FINDINGS -->
 
 ## What we measured
@@ -43,7 +47,7 @@ CSE 6359 Advanced Topics in Systems & Architecture — Final Project, Fall 2026
 |---|---|
 | **GPU** | NVIDIA GeForce RTX 5090 (Blackwell, sm_120, 32 GB GDDR7, 170 SMs), driver 595.91 |
 | **Software** | PyTorch 2.13 (CUDA 13.0), Transformers 5.19, bitsandbytes 0.50.2, vLLM 0.32 — pinned in [`requirements.txt`](requirements.txt) |
-| **Models** | Qwen2.5-3B / 7B / 14B-Instruct; Qwen3-8B (non-thinking mode) as a second model family |
+| **Models** | Qwen2.5-3B / 7B / 14B-Instruct; Qwen3-8B and Qwen3-32B (non-thinking mode) as a second model family — Qwen3-32B fits the 32 GB GPU only at 4 bits |
 | **Configurations** | HF + bitsandbytes: BF16, INT8 (LLM.int8()), NF4 · vLLM: BF16, FP8 W8A8, GPTQ-INT8 (W8A16), AWQ-INT4 and GPTQ-INT4 (W4A16, Marlin kernels) |
 | **Workloads** | controlled sweep (batch 1–256 × prompt 128–2048 tokens, 128 generated tokens) · output-length sweep (32–512 generated tokens) · 300 ShareGPT requests replayed at 1–64 concurrent clients · WikiText-2 perplexity · GSM8K (all 1,319 questions) · MMLU (all 14,042 questions) |
 | **Metrics** | weight + peak memory, KV-cache capacity, TTFT, TPOT, throughput, GPU energy per token, perplexity, accuracy; kernel microbenchmarks, measured roofline, per-step profiles |
@@ -170,6 +174,8 @@ CSE 6359 Advanced Topics in Systems & Architecture — Final Project, Fall 2026
 |             | vLLM BF16   | 9.72               | 0.00        |    92   | +0.6     | 0.215    |   69.6 | 0.0        | 0.610    |
 |             | vLLM FP8    | 9.73               | 0.00        |    91.8 | +0.5     | 0.488    |   68.9 | -0.7       | <0.001 |
 |             | vLLM AWQ-4  | 10.18              | +0.46       |    91.1 | -0.2     | 0.818    |   68.9 | -0.7       | 0.003    |
+| Qwen3-32B   | HF NF4      | 7.93               | --            |    92.6 | --         | --       |   79.4 | --           | --       |
+|             | vLLM AWQ-4  | 7.88^{\S}        | --            |    94.2 | --         | --       |   78.1 | --           | --       |
 
 
 ![quality](figures/q4_quality_vs_memory.png)
@@ -233,7 +239,7 @@ final_project/
 cd final_project
 uv venv .venv --python 3.12 && source .venv/bin/activate
 uv pip install -r requirements.txt
-./run_all.sh                         # every experiment, about eleven GPU-hours on an RTX 5090
+./run_all.sh                         # every experiment, about twelve GPU-hours on an RTX 5090
 python scripts/make_figures.py       # figures/*.pdf|png
 python scripts/make_tables.py        # results/summary/* and report/tables/*
 python scripts/make_numbers.py       # report/numbers.tex (every number quoted in the report)

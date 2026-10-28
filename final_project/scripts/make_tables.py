@@ -153,7 +153,7 @@ def table_crossover(size="7b"):
 def table_quality():
     ppl, gsm = A.quality()
     mm = A.mmlu()
-    names = {"3b": "Qwen2.5-3B", "7b": "Qwen2.5-7B", "14b": "Qwen2.5-14B", "q3-8b": "Qwen3-8B"}
+    names = {"3b": "Qwen2.5-3B", "7b": "Qwen2.5-7B", "14b": "Qwen2.5-14B", "q3-8b": "Qwen3-8B", "q3-32b": "Qwen3-32B"}
 
     def pick(df, b, size, p, col, scale=1.0):
         if df.empty:
@@ -162,7 +162,7 @@ def table_quality():
         return r[col].iloc[0] * scale if len(r) else np.nan
 
     rows = []
-    for size in ("3b", "7b", "14b", "q3-8b"):
+    for size in ("3b", "7b", "14b", "q3-8b", "q3-32b"):
         first = True
         base_ppl, base_g, base_m = (pick(ppl, "hf", size, "bf16", "ppl"), pick(gsm, "hf", size, "bf16", "accuracy", 100),
                                     pick(mm, "hf", size, "bf16", "accuracy", 100))
@@ -175,8 +175,10 @@ def table_quality():
             tg = None if ref else A.paired("gsm8k", ("hf", size, "bf16"), (b, size, p))
             tm = None if ref else A.paired("mmlu", ("hf", size, "bf16"), (b, size, p))
             outlier = len(same) > 2 and pv > 3 * same.median()
+            r_ppl = ppl[(ppl.backend == b) & (ppl["size"] == size) & (ppl.precision == p)] if not ppl.empty else ppl
+            forced = len(r_ppl) and "dtype_used" in r_ppl and r_ppl.dtype_used.iloc[0] not in ("auto", None)
             rows.append({"Model": names[size] if first else "", "Config": SHORT[(b, p)],
-                         "PPL": fmt(pv, 2) + ("$^{\\ddagger}$" if outlier else ""),
+                         "PPL": fmt(pv, 2) + ("$^{\\ddagger}$" if outlier else "") + ("$^{\\S}$" if forced else ""),
                          "$\\Delta$PPL": "--" if ref else signed(pv - base_ppl, 2),
                          "GSM8K": fmt(gv, 1), "$\\Delta$": "--" if ref else signed(gv - base_g, 1),
                          "$p$": fmt_p(tg["p_value"]) if tg else "--",
@@ -186,9 +188,12 @@ def table_quality():
     write(pd.DataFrame(rows), "t_quality",
           "Q4 --- quality. WikiText-2 perplexity (2048-token windows), GSM8K accuracy (\\%, 1,319 questions, zero-shot "
           "CoT, greedy) and MMLU accuracy (\\%, 14,042 questions, zero-shot). Deltas are against HF BF16 of the same "
-          "model; $p$ is the two-sided exact McNemar test of the paired answers against HF BF16.", "tab:quality",
+          "model (Qwen3-32B has none: it does not fit the GPU in BF16); $p$ is the two-sided exact McNemar test of the "
+          "paired answers against HF BF16.", "tab:quality",
           colfmt="llrrrrrrrr", wide=True,
-          note="$^{\\ddagger}$Degraded on raw text but not on chat-formatted text; see \\cref{sec:q4}.")
+          note="$^{\\ddagger}$Degraded on raw text but not on chat-formatted text; see \\cref{sec:q4}. "
+               "$^{\\S}$BF16 activations: with the checkpoint's FP16 activations some 2048-token windows overflow "
+               "(\\cref{sec:general}).")
 
 
 def table_serving(size="7b"):

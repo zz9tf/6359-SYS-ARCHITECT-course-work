@@ -3,7 +3,7 @@ Quantization is the standard way to fit large language models into GPU memory, b
 model is not automatically a faster one. We measure the memory--performance trade-off end to end
 on an NVIDIA RTX 5090 for Qwen2.5 models with 3B, 7B and 14B parameters in eight
 configurations: BF16, LLM.int8() and NF4 on Hugging Face Transformers, and BF16, FP8 W8A8,
-GPTQ-INT8, AWQ-INT4 and GPTQ-INT4 on vLLM, and repeat the core measurements on Qwen3-8B. The
+GPTQ-INT8, AWQ-INT4 and GPTQ-INT4 on vLLM, and repeat the core measurements on Qwen3-8B and, at 4 bits, Qwen3-32B. The
 study covers \NumMeasurements{} timed runs, a replay of 300 ShareGPT requests, WikiText-2
 perplexity, and GSM8K and MMLU accuracy with paired significance tests. Real weight savings fall
 short of the nominal ratio (\WtNFSeven{} rather than $4\times$ for 4-bit weights on the 7B model)

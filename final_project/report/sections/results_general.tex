@@ -14,4 +14,16 @@ step becomes bound by the host rather than by memory. Qwen3-8B also stores \FamK
 KV-cache bytes per token, so at $B=256$ none of its configurations fits the cache; the memory a
 format saves on weights matters even more for such models. \FamQualitySentence
 
+\textbf{Scaling up: Qwen3-32B.} At 32B parameters the question changes from speed to feasibility.
+Qwen3-32B needs \BigBFw\,GB in BF16 and about half of that in FP8 or INT8, more than the GPU's
+32\,GB, so on this GPU it runs only at 4 bits: AWQ-INT4 takes \BigAWQw\,GB and leaves room for
+\BigAWQkv{} cached tokens, and NF4 takes \BigNFw\,GB. Against Qwen3-8B in BF16 (\SmallBFw\,GB, a
+similar budget), the 4-bit 32B model needs \BigAWQtpot\,ms per decoded token at batch size one
+(vLLM; 8B BF16: \SmallBFtpot\,ms) and scores \BigGSMawq\% vs.\ \SmallGSMbf\% on GSM8K
+(\BigGAWQp) and \BigMMLUawq\% vs.\ \SmallMMLUbf\% on MMLU (\BigMAWQp). \BigVerdict{} One caveat is
+numerical: the AWQ checkpoint ships FP16 activations, and in \BigNaNwin{} perplexity windows the
+activations overflow beyond the first 512 positions and the loss becomes NaN; with BF16
+activations every window is finite (perplexity \BigPPLawq), so long-context use of this
+checkpoint should run in BF16.
+
 \input{tables/t_generalization}
