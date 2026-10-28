@@ -42,8 +42,13 @@ DIVERGING = LinearSegmentedColormap.from_list(
     "speedup", ["#8f1d1d", "#e34948", "#f6c4c3", "#f0efec", "#b7d3f6", "#2a78d6", "#0d366b"])
 
 
+MEW = 1.2   # marker edge width; thinner for the small report figures
+
+
 def setup(scale: float = 1.0):
-    """scale > 1 enlarges every font (slide versions of the figures)."""
+    """scale > 1 enlarges every font (slide versions); scale < 1 sizes them for the 5.5 in report column."""
+    global MEW
+    MEW = 1.2 if scale >= 1 else 0.9
     for f in ("/mnt/c/Windows/Fonts/arial.ttf", "/mnt/c/Windows/Fonts/arialbd.ttf"):
         if Path(f).exists():
             font_manager.fontManager.addfont(f)
@@ -54,7 +59,8 @@ def setup(scale: float = 1.0):
         "axes.edgecolor": AXIS, "axes.labelcolor": INK2, "axes.titlecolor": INK,
         "axes.spines.top": False, "axes.spines.right": False, "axes.grid": True, "axes.axisbelow": True,
         "grid.color": GRID, "grid.linewidth": 0.6, "xtick.color": MUTED, "ytick.color": MUTED,
-        "xtick.labelcolor": INK2, "ytick.labelcolor": INK2, "lines.linewidth": 1.6, "lines.markersize": 5,
+        "xtick.labelcolor": INK2, "ytick.labelcolor": INK2,
+        "lines.linewidth": 1.6 if scale >= 1 else 1.2, "lines.markersize": 5 if scale >= 1 else 3.6,
         "legend.frameon": False, "legend.fontsize": 8 * scale, "figure.dpi": 110, "savefig.dpi": 300,
         "savefig.bbox": "tight", "savefig.pad_inches": 0.04, "pdf.fonttype": 42,
     })
@@ -65,5 +71,5 @@ def style(backend, precision):
     hollow = backend == "hf"
     c = COLOR[precision]
     return dict(color=c, marker=MARKER[precision], linestyle=LINESTYLE[backend],
-                markerfacecolor="white" if hollow else c, markeredgecolor=c, markeredgewidth=1.2,
+                markerfacecolor="white" if hollow else c, markeredgecolor=c, markeredgewidth=MEW,
                 label=LABEL[(backend, precision)])

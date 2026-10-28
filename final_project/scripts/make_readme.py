@@ -30,6 +30,8 @@ def main():
     m = macros()
     findings = f"""## Key findings
 
+![The bit-width does not predict the speedup](figures/teaser_speedup.png)
+
 1. **Memory — smaller, but not 4× smaller.** Only the decoder's linear layers shrink; the embedding,
    LM head, norms and quantization scales stay 16-bit. On Qwen2.5-7B, 4-bit weights save
    **{m['WtNFSeven']}** (NF4) to **{m['WtAWQSeven']}** (AWQ) instead of 4×, and INT8 **{m['WtIntEightSeven']}** instead of 2×.
@@ -68,7 +70,7 @@ def main():
 {md_table('t_weight_memory_all')}
 
 ![weights](figures/q1_weight_memory.png)
-![memory scaling](figures/q1_memory_scaling.png)
+![memory](figures/q1_memory_main.png)
 
 **Q2 — latency and throughput, Qwen2.5-7B, prompt 512, 128 output tokens**
 

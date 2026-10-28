@@ -111,8 +111,8 @@ def main():
                 f"and then has room for just {bf14.kv_cache_tokens.iloc[0] / 1e3:.0f}K cached tokens, "
                 f"against {k14 / 1e3:.0f}K with AWQ-INT4 at the default 85\\%.")
     elif len(bf14):
-        note = (f"In BF16 the 14B model's 29.5\\,GB of weights leave no room for any KV cache even when vLLM may "
-                f"use 95\\% of the GPU, so it cannot be served at all, while its AWQ-INT4 version runs with "
+        note = (f"The 14B model is the extreme case. In BF16 its 29.5\\,GB of weights leave no room for a KV cache, "
+                f"even when vLLM may use 95\\% of the GPU, so vLLM cannot serve it at all. In AWQ-INT4 it runs with "
                 f"{k14 / 1e3:.0f}K cached tokens.")
     else:
         note = ""
@@ -136,6 +136,11 @@ def main():
     putx("NFslowdown", 1 / cell("hf", "3b", "nf4", 1, 512, "speedup_tpot"), 2)
     putx("NFsevenB", cell("hf", "7b", "nf4", 1, 512, "speedup_tpot"), 2)
     putx("NFfourteenB", cell("hf", "14b", "nf4", 1, 512, "speedup_tpot"), 2)
+    # decode speedup at B=1 as a share of the byte saving (the ideal when decode only streams weights)
+    for prec, b, tag in (("awq-int4", "vllm", "AWQ"), ("fp8", "vllm", "FP"), ("gptq-int8", "vllm", "GQE"),
+                         ("nf4", "hf", "NF"), ("int8", "hf", "INT")):
+        save = (vget("7b", "bf16", "load_gib") / vget("7b", prec, "load_gib")) if b == "vllm" else wratio("7b", prec)
+        put(f"Ideal{tag}", cell(b, "7b", prec, 1, 512, "speedup_tpot") / save * 100, "{:.0f}")
     # cells the 14B model can only run on HF once quantized (BF16 runs out of memory)
     o14 = oom[(oom["size"] == "14b") & (oom.backend == "hf")] if not oom.empty else oom
     ran = agg[(agg["size"] == "14b") & (agg.backend == "hf") & (agg.tag == "grid")]
@@ -434,9 +439,9 @@ def main():
         t = A.gsm8k_paired(("hf", size, "bf16"), ("vllm", size, "bf16"))
         if t:
             put(f"BackendFlips{tag}", t["a_only"] + t["b_only"], "{:d}")
-    # significance of the 8-bit differences, Bonferroni over every quantized-vs-BF16 test on 3B and 7B
+    # significance: Bonferroni over every quantized-vs-BF16 test of one benchmark (3 Qwen2.5 sizes x 6 formats)
     fam = []
-    for size in ("3b", "7b"):
+    for size in ("3b", "7b", "14b"):
         for b, p_ in eight + four:
             t = A.gsm8k_paired(("hf", size, "bf16"), (b, size, p_))
             if t:
@@ -448,16 +453,21 @@ def main():
         sig8 = [r for r in fam if (r[1], r[2]) in eight and r[4] < 0.05]
         p8min = min(r[4] for r in fam if (r[1], r[2]) in eight)
         if not sig8:
-            put("EightSentence", f"none of these differences is significant (McNemar $p\\ge{p8min:.2f}$)")
+            put("EightSentence", f"no 8-bit difference reaches $p<0.05$ (smallest $p={p8min:.2f}$)")
         else:
             names = {("hf", "int8"): "LLM.int8()", ("vllm", "gptq-int8"): "GPTQ-INT8", ("vllm", "fp8"): "FP8"}
             desc = "; ".join(f"{names[(r[1], r[2])]} on {r[0].upper()}, ${r[3]:+.1f}$ points, $p={r[4]:.3f}$" for r in sig8)
             surv = [r for r in sig8 if r[4] < alpha]
-            what = "an improvement" if all(r[3] > 0 for r in sig8) else "a change"
-            put("EightSentence", (f"the only nominally significant difference is {what} ({desc})" if len(sig8) == 1 else
-                                  f"nominally significant differences: {desc}") +
-                (f", which does not survive a Bonferroni correction over the {len(fam)} comparisons"
-                 if not surv else f", significant even after a Bonferroni correction over the {len(fam)} comparisons"))
+            gains = all(r[3] > 0 for r in sig8)
+            one = len(sig8) == 1
+            head = (f"the only 8-bit {'difference' if one else 'differences'} with $p<0.05$ "
+                    f"{'is' if one else 'are'} {'an improvement' if one and gains else ('improvements' if gains else 'changes')} "
+                    f"({desc})")
+            tail = ((", and it does not survive the Bonferroni correction" if one else
+                     ", and neither survives the Bonferroni correction" if len(sig8) == 2 else
+                     ", and none survives the Bonferroni correction") if not surv else
+                    ", and it survives the Bonferroni correction")
+            put("EightSentence", head + tail)
         sig4_3 = [r for r in fam if r[0] == "3b" and (r[1], r[2]) in four]
         put("FourThreeSurvive", f"{sum(r[4] < alpha for r in sig4_3)} of {len(sig4_3)}")
     # MMLU: same comparisons, Bonferroni within the MMLU family
@@ -487,6 +497,10 @@ def main():
             if t:
                 v = abs(t["delta_pp"])
                 put(f"MBackendNoise{tag}", "less than 0.1" if v < 0.05 else f"{v:.1f}")
+    four_m = [abs(r[2]) for r in mfam if r[1] in four] if mfam else []
+    if four_m:
+        put("MFourAbsMin", min(four_m), "{:.1f}")
+        put("MFourAbsMax", max(four_m), "{:.1f}")
     # 8-bit kernels (GPTQ-INT8, FP8) on both benchmarks; LLM.int8() and 4-bit costs on MMLU
     kern8 = []
     for bench in ("gsm8k", "mmlu"):
@@ -530,7 +544,8 @@ def main():
         if big:
             put("QualityGuide", f"Qwen2.5-14B in AWQ-INT4 needs {m14:.1f}\\,GB of weights, less than the {m7:.1f}\\,GB "
                 f"of Qwen2.5-7B in BF16, and scores {a14:.1f}\\% vs.\\ {a7:.1f}\\% on GSM8K and {mm14:.1f}\\% vs.\\ "
-                f"{mm7:.1f}\\% on MMLU (McNemar {p14} and {NUMS['MMLUBigP']}).")
+                f"{mm7:.1f}\\% on MMLU (" + (f"McNemar {p14} for both" if p14 == NUMS['MMLUBigP'] else
+                                              f"McNemar {p14} and {NUMS['MMLUBigP']}") + ").")
         put("QualityReadme", f"GPTQ-INT8 and FP8 stay within {k8:.1f} points of BF16 on GSM8K and MMLU (LLM.int8() costs "
             f"{int3.replace('$', '').lstrip('-+')} MMLU points on 3B); 4-bit formats cost {lo:.1f}–{hi:.1f} MMLU points, most on the "
             "smallest model" + (f"; Qwen2.5-14B in AWQ-INT4 ({m14:.1f} GB) beats Qwen2.5-7B in BF16 ({m7:.1f} GB) on GSM8K "
@@ -605,14 +620,12 @@ def main():
         rmax = max(abs(fr[f"d_mmlu_{k}"]) for k, _ in have)
         qmax = max(abs(fq[f"d_mmlu_{k}"]) for k, _ in have)
         gmax = max(abs(fr[f"d_gsm8k_{k}"]) for k, _ in have if ok(fr.get(f"d_gsm8k_{k}", float("nan"))))
-        txt = (f"Quality costs are {'smaller' if rmax < qmax else 'of the same order'}: Qwen3-8B's MMLU accuracy changes by "
-               f"{lst(fr)} points relative to BF16, against {lst(fq)} for Qwen2.5-7B, and no GSM8K change exceeds "
-               f"{gmax:.1f} points.")
+        txt = (f"Quality costs stay small (\\cref{{fig:general}}b; no change above {max(gmax, rmax):.1f} points).")
         fp, awq = fr.get("d_mmlu_fp8", float("nan")), fr.get("d_mmlu_awq-int4", float("nan"))
+        qfp = fq.get("d_mmlu_fp8", float("nan"))
         if ok(fp) and ok(awq) and abs(fp) >= abs(awq) - 0.1:
-            txt += (" The ordering seen on Qwen2.5, where 8-bit formats are free and 4-bit formats are not, does not hold "
-                    "here: FP8 costs as much as AWQ-INT4. Which format preserves quality is a property of the model and "
-                    "must be measured, not assumed from the bit-width.")
+            txt += (f" But the order of the formats changes: FP8 costs {abs(qfp):.1f} MMLU points on Qwen2.5-7B but "
+                    f"{abs(fp):.1f} on Qwen3-8B, as much as AWQ-INT4. Which format keeps quality depends on the model.")
         put("FamQualitySentence", txt)
         if "does not hold" in txt and "QualityConclusion" in NUMS:
             put("QualityConclusion", NUMS["QualityConclusion"].rstrip(".") + "; on Qwen3-8B, however, FP8 costs as much "
@@ -654,10 +667,12 @@ def main():
         tg = A.paired("gsm8k", ("hf", "q3-8b", "bf16"), ("vllm", "q3-32b", "awq-int4"))
         tm = A.paired("mmlu", ("hf", "q3-8b", "bf16"), ("vllm", "q3-32b", "awq-int4"))
         w32 = float(l32.load_gib.iloc[0]) * 2**30 / 1e9
+        putx("BigMemRatio", w32 / h8, 2)
         if tg and tm:
             both = tg["delta_pp"] > 0 and tm["delta_pp"] > 0 and tg["p_value"] < 0.05 and tm["p_value"] < 0.05
-            put("BigVerdict", (f"A model four times larger, in {w32 / h8:.2f}$\\times$ the weight memory, is significantly "
-                               "better on both benchmarks; on this GPU, that model exists only because of quantization.")
+            put("BigVerdict", (f"A model four times larger, using only {w32 / h8:.2f}$\\times$ the weight memory, is "
+                               "significantly better on both benchmarks. On this GPU, that model can run only because of "
+                               "quantization.")
                 if both else "The larger 4-bit model is not uniformly better, so the choice must be checked per task.")
 
     def tex_safe(v):

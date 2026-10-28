@@ -1,0 +1,27 @@
+\begin{table}[t]
+\centering
+\footnotesize
+\caption{Quality cost of each format. First row: BF16 values (WikiText-2 perplexity; GSM8K and MMLU accuracy in \%). Other rows: change against HF BF16 of the same model (accuracy in points). \textbf{Bold}: significant after Bonferroni correction over the 18 comparisons per benchmark (exact McNemar test). Last row: BF16 on vLLM, the noise floor.}
+\label{tab:quality_main}
+\setlength{\tabcolsep}{2.9pt}
+\begin{tabular}{lllrrrrrrrrr}
+\toprule
+ & & & \multicolumn{3}{c}{Qwen2.5-3B} & \multicolumn{3}{c}{Qwen2.5-7B} & \multicolumn{3}{c}{Qwen2.5-14B} \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-12}
+Format & Backend & W/A & PPL & GSM8K & MMLU & PPL & GSM8K & MMLU & PPL & GSM8K & MMLU \\
+\midrule
+BF16 (value) & HF & 16/16 & 8.56 & 85.8 & 63.5 & 7.46 & 90.8 & 71.4 & 5.70 & 93.9 & 77.0 \\
+\midrule
+LLM.int8() & HF & 8/8 & $+0.10$ & $-0.3$ & $\mathbf{-1.1}$ & $+0.03$ & $-0.2$ & $-0.2$ & $+0.08$ & $+0.6$ & $-0.3$ \\
+FP8 & vLLM & 8/8 & $+0.09$ & $-0.5$ & $-0.4$ & $+0.05$ & $0.0$ & $-0.1$ & $+0.07$ & $+0.5$ & $0.0$ \\
+GPTQ-INT8 & vLLM & 8/16 & $0.00$ & $+0.6$ & $+0.1$ & $0.00$ & $+0.9$ & $0.0$ & $+0.01$ & $+0.8$ & $-0.1$ \\
+\midrule
+NF4 & HF & 4/16 & $+0.55$ & $\mathbf{-3.3}$ & $\mathbf{-2.8}$ & $+0.31$ & $-0.5$ & $\mathbf{-0.6}$ & $+0.37$ & $-0.7$ & $-0.6$ \\
+AWQ-INT4 & vLLM & 4/16 & $+0.54$ & $\mathbf{-3.1}$ & $\mathbf{-2.2}$ & $+0.39$ & $-0.5$ & $\mathbf{-1.6}$ & $+0.46$ & $+0.1$ & $\mathbf{-1.9}$ \\
+GPTQ-INT4 & vLLM & 4/16 & $+0.66$ & $\mathbf{-3.8}$ & $\mathbf{-2.5}$ & $+0.32$ & $+0.2$ & $\mathbf{-1.4}$ & $+31.77$$^{\ddagger}$ & $-0.2$ & $-0.6$ \\
+\midrule
+BF16 (noise) & vLLM & 16/16 & $0.00$ & $+0.2$ & $+0.1$ & $0.00$ & $+0.4$ & $0.0$ & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\par\vspace{3pt}\parbox{\linewidth}{\scriptsize $^{\ddagger}$Large only on raw text; on chat-formatted text this checkpoint matches the other 14B formats (\cref{sec:q4}).}
+\end{table}

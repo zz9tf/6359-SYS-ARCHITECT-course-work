@@ -1,20 +1,5 @@
-\subsection{Threats to validity}
+\textbf{Limitations.} We test one GPU and dense Qwen models. The mechanism is architectural and Qwen3
+reproduces it, but crossover batch sizes depend on each GPU's ratio of compute to bandwidth. The GPU
+also drives a display, so we could not lock its clocks (repeated runs still agree closely). We do not
+study 4-bit activations, KV-cache quantization or mixture-of-experts models.
 \label{sec:limits}
-\emph{One GPU, two model families.} All results come from a single RTX 5090 and dense Qwen
-models (Qwen2.5 in three sizes; Qwen3-8B and Qwen3-32B as a check). The mechanism we identify is architectural
-(bytes per weight against arithmetic intensity), and Qwen3-8B reproduces it, so the qualitative
-picture should carry over to other dense models and GPUs, but the crossover batch sizes scale with
-each GPU's FLOP-to-bandwidth ratio and must be re-measured. Mixture-of-experts models, whose decode
-reads only a fraction of the weights, are outside our scope.
-\emph{Display GPU.} The GPU also drives a desktop; the driver's watchdog aborts any kernel that runs
-for several seconds, which cost us one cell (LLM.int8() prefill of 16 prompts of 2048 tokens on the
-14B model).
-\emph{Library versions.} Kernel coverage moves fast: newer bitsandbytes releases may close part of the
-gap we measure, and vLLM picks kernels per GPU architecture. We pin every version and release the
-harness so the study can be re-run.
-\emph{Uncontrolled clocks.} We could not lock clocks without administrator rights. Repetitions agree closely (\cref{sec:method}), and we report means.
-\emph{Synthetic prompts.} Random token ids exercise exactly the same kernels as natural text in a
-dense model, but they are out of distribution, which is why quality is measured separately on
-WikiText-2 and GSM8K and speed on real ShareGPT traffic.
-\emph{Greedy decoding.} Quality numbers use greedy decoding, the single most common evaluation
-setting; sampling would add variance but would not change the cost of a step.

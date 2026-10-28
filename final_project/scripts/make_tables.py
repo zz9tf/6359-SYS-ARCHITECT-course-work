@@ -22,20 +22,29 @@ TEXNAME = {("hf", "bf16"): "HF BF16", ("hf", "int8"): "HF INT8 (LLM.int8)", ("hf
            ("vllm", "awq-int4"): "vLLM AWQ W4A16", ("vllm", "gptq-int4"): "vLLM GPTQ W4A16"}
 
 
-def write(df, name, caption, label, colfmt=None, note=None, wide=False):
-    TEX.mkdir(parents=True, exist_ok=True)
+def write(df, name, caption, label, colfmt=None, note=None, wide=False, pos="htbp", tex_names=None):
+    """CSV and Markdown keep readable column names; tex_names renames columns for the LaTeX table only."""
     MD.mkdir(parents=True, exist_ok=True)
     A.save_csv(df, f"{name}.csv")
     (MD / f"{name}.md").write_text(df.to_markdown(index=False) + "\n")
     colfmt = colfmt or "l" + "r" * (len(df.columns) - 1)
-    body = df.to_latex(index=False, escape=False, column_format=colfmt, na_rep="--")
+    body = df.rename(columns=tex_names or {}).to_latex(index=False, escape=False, column_format=colfmt, na_rep="--")
     body = re.sub(r"(?<!\\)%", r"\\%", body)
-    env = "table*" if wide else "table"
-    tex = [f"\\begin{{{env}}}[t]", "\\centering", "\\footnotesize", f"\\caption{{{caption}}}", f"\\label{{{label}}}",
-           "\\setlength{\\tabcolsep}{4pt}" if wide else "\\setlength{\\tabcolsep}{3.2pt}", body.strip()]
+    write_tex(name, body.strip(), caption, label, note, size="\\footnotesize" if wide else "\\small",
+              sep="4pt" if wide else "3.2pt", pos=pos)
+
+
+def write_tex(name, body, caption, label, note=None, size="\\small", sep="4pt", pos="htbp"):
+    """One single-column table float (NeurIPS layout: the caption goes above the table).
+
+    Appendix tables float anywhere (htbp); main-text tables pass pos="t".
+    """
+    TEX.mkdir(parents=True, exist_ok=True)
+    tex = [f"\\begin{{table}}[{pos}]", "\\centering", size, f"\\caption{{{caption}}}", f"\\label{{{label}}}",
+           f"\\setlength{{\\tabcolsep}}{{{sep}}}", body]
     if note:
-        tex.append(f"\\par\\vspace{{2pt}}\\parbox{{\\linewidth}}{{\\scriptsize {note}}}")
-    tex.append(f"\\end{{{env}}}")
+        tex.append(f"\\par\\vspace{{3pt}}\\parbox{{\\linewidth}}{{\\scriptsize {note}}}")
+    tex.append("\\end{table}")
     (TEX / f"{name}.tex").write_text("\n".join(tex) + "\n")
     print(f"  wrote {name}")
 
@@ -92,8 +101,9 @@ def table_weights():
     A.save_csv(full, "t_weight_memory_all.csv")
     (MD / "t_weight_memory_all.md").write_text(full.to_markdown(index=False) + "\n")
     write(full[full.Model != "Qwen2.5-3B"], "t_weight_memory",
-          "Q1 --- weight memory: naive estimate ($\\#$params$\\times$bits/8), our analytic model (unquantized "
-          "embedding/LM head/norms + quantization metadata), and measured on the GPU.", "tab:weights", colfmt="llrrrrr", wide=True)
+          "Weight memory: the naive estimate ($\\#$params$\\times$bits/8), our model (embedding, LM head and norms "
+          "stay in 16 bits; each format adds its scales), and the value measured on the GPU.", "tab:weights",
+          colfmt="llrrrrr", wide=True)
 
 
 def table_speed(size="7b", L=512):
@@ -116,9 +126,15 @@ def table_speed(size="7b", L=512):
                      "Decode speedup B=1": fmt(s.speedup_tpot.get(1, np.nan), 2, "$\\times$"),
                      "mJ/token B=1": fmt(r.j_per_tok.get(1, np.nan) * 1e3, 0),
                      f"mJ/token B={bmax}": fmt(r.j_per_tok.get(bmax, np.nan) * 1e3, 0)})
+    bm = 64   # short LaTeX headers: subscripts give the batch size
+    short = {"TTFT B=1 (ms)": "TTFT$_{1}$", "TPOT B=1 (ms)": "TPOT$_{1}$", f"TPOT B={bm} (ms)": f"TPOT$_{{{bm}}}$",
+             f"tok/s B={bm}": f"tok/s$_{{{bm}}}$", "Decode speedup B=1": "Speedup$_{1}$", "mJ/token B=1": "mJ/tok$_{1}$",
+             f"mJ/token B={bm}": f"mJ/tok$_{{{bm}}}$"}
     write(pd.DataFrame(rows), "t_speed",
-          f"Q2 --- latency, throughput and energy for Qwen2.5-{size.upper()} at prompt length {L} and 128 output "
-          "tokens (mean of 3 runs). Speedup is relative to BF16 on the same backend.", "tab:speed", colfmt="lrrrrrrr", wide=True)
+          f"Latency, throughput and energy of Qwen2.5-{size.upper()} with {L}-token prompts and 128 output tokens "
+          "(mean of 3 runs). Subscripts give the batch size. TTFT and TPOT in ms; Speedup$_1$ is the decode speedup "
+          "over BF16 on the same backend; energy is GPU energy per output token.", "tab:speed",
+          colfmt="lrrrrrrr", wide=True, tex_names=short)
 
 
 def table_crossover(size="7b"):
@@ -130,7 +146,7 @@ def table_crossover(size="7b"):
     def cross_txt(c):
         return "never" if c == 0 else ("all $B$" if np.isinf(c) else f"$B\\approx{c:.0f}$")
 
-    rows = []
+    rows, lines = [], []
     for b, p in ORDER:
         if p == "bf16":
             continue
@@ -144,10 +160,20 @@ def table_crossover(size="7b"):
             row[f"{name} max $B$"] = f"{fmt(r.speedup_bmax, 2, '$\\times$')} ({r.bmax})"
             row[f"{name} wins up to"] = cross_txt(r.crossover_batch)
         rows.append(row)
-    write(pd.DataFrame(rows), "t_crossover",
-          f"Q3 --- speedup over BF16 on the same backend at batch size 1 and at the largest batch measured, and "
-          f"the batch size at which the quantized configuration stops winning (Qwen2.5-{size.upper()}, $L=512$, 128 "
-          "output tokens; linear interpolation in $\\log B$).", "tab:crossover", colfmt="lrrlrrl", wide=True)
+        lines.append(" & ".join(row.values()) + " \\\\")
+    df = pd.DataFrame(rows)
+    A.save_csv(df, "t_crossover.csv")
+    (MD / "t_crossover.md").write_text(df.to_markdown(index=False) + "\n")
+    body = "\n".join(["\\begin{tabular}{lrrlrrl}", "\\toprule",
+                      " & \\multicolumn{3}{c}{Decode step (TPOT)} & \\multicolumn{3}{c}{Whole request (E2E)} \\\\",
+                      "\\cmidrule(lr){2-4}\\cmidrule(lr){5-7}",
+                      "Config & $B{=}1$ & largest $B$ & faster up to & $B{=}1$ & largest $B$ & faster up to \\\\",
+                      "\\midrule", *lines, "\\bottomrule", "\\end{tabular}"])
+    write_tex("t_crossover", body,
+              f"Where each format stops paying off (Qwen2.5-{size.upper()}, 512-token prompts, 128 output tokens). "
+              "Speedup over BF16 on the same backend at batch size 1 and at the largest batch we ran (in brackets), "
+              "and the batch size up to which the format is faster (linear interpolation in $\\log B$).",
+              "tab:crossover", size="\\footnotesize", sep="3.5pt")
 
 
 def table_quality():
@@ -186,14 +212,121 @@ def table_quality():
                          "$p$\\,": fmt_p(tm["p_value"]) if tm else "--"})
             first = False
     write(pd.DataFrame(rows), "t_quality",
-          "Q4 --- quality. WikiText-2 perplexity (2048-token windows), GSM8K accuracy (\\%, 1,319 questions, zero-shot "
-          "CoT, greedy) and MMLU accuracy (\\%, 14,042 questions, zero-shot). Deltas are against HF BF16 of the same "
-          "model (Qwen3-32B has none: it does not fit the GPU in BF16); $p$ is the two-sided exact McNemar test of the "
-          "paired answers against HF BF16.", "tab:quality",
+          "All quality results. WikiText-2 perplexity (2048-token windows), GSM8K accuracy (\\%, 1,319 questions, "
+          "zero-shot chain of thought, greedy) and MMLU accuracy (\\%, 14,042 questions, zero-shot). $\\Delta$ is the "
+          "change against HF BF16 of the same model (Qwen3-32B has no BF16 run: it does not fit the GPU); $p$ is the "
+          "two-sided exact McNemar test on the paired answers.", "tab:quality",
           colfmt="llrrrrrrrr", wide=True,
-          note="$^{\\ddagger}$Degraded on raw text but not on chat-formatted text; see \\cref{sec:q4}. "
-               "$^{\\S}$BF16 activations: with the checkpoint's FP16 activations some 2048-token windows overflow "
-               "(\\cref{sec:general}).")
+          note="$^{\\ddagger}$High only on raw text, not on chat-formatted text (\\cref{sec:q4}). "
+               "$^{\\S}$Run with BF16 activations: with the checkpoint's FP16 activations, some 2048-token windows "
+               "overflow (\\cref{sec:general}).")
+
+
+def table_quality_main():
+    """Main-text quality table: change against HF BF16, formats down (8-bit, then 4-bit), model sizes across."""
+    ppl, gsm = A.quality()
+    mm = A.mmlu()
+    sizes = ["3b", "7b", "14b"]
+    spec = [("hf", "int8", "LLM.int8()", "HF", "8/8"), ("vllm", "fp8", "FP8", "vLLM", "8/8"),
+            ("vllm", "gptq-int8", "GPTQ-INT8", "vLLM", "8/16"), ("hf", "nf4", "NF4", "HF", "4/16"),
+            ("vllm", "awq-int4", "AWQ-INT4", "vLLM", "4/16"), ("vllm", "gptq-int4", "GPTQ-INT4", "vLLM", "4/16")]
+
+    def pick(df, b, size, p, col, scale=1.0):
+        if df.empty:
+            return np.nan
+        r = df[(df.backend == b) & (df["size"] == size) & (df.precision == p)]
+        return r[col].iloc[0] * scale if len(r) else np.nan
+
+    tests = {bench: {(b, size, p): A.paired(bench, ("hf", size, "bf16"), (b, size, p))
+                     for size in sizes for b, p, *_ in spec} for bench in ("gsm8k", "mmlu")}
+    n_tests = {bench: sum(t is not None for t in d.values()) for bench, d in tests.items()}
+    alpha = {bench: 0.05 / n for bench, n in n_tests.items() if n}
+
+    def acc_delta(bench, df, b, size, p):
+        v, base = pick(df, b, size, p, "accuracy", 100), pick(df, "hf", size, "bf16", "accuracy", 100)
+        if np.isnan(v) or np.isnan(base):
+            return "--"
+        d = round(v - base, 1)
+        t = tests[bench].get((b, size, p))
+        txt = f"{d:+.1f}" if d != 0 else "0.0"
+        return f"$\\mathbf{{{txt}}}$" if t and t["p_value"] < alpha[bench] else f"${txt}$"
+
+    def ppl_delta(b, size, p):
+        v, base = pick(ppl, b, size, p, "ppl"), pick(ppl, "hf", size, "bf16", "ppl")
+        if np.isnan(v) or np.isnan(base):
+            return "--"
+        d = v - base
+        return (f"${d:+.2f}$" if round(d, 2) != 0 else "$0.00$") + ("$^{\\ddagger}$" if d > 3 * base else "")
+
+    lines = ["BF16 (value) & HF & 16/16 & " + " & ".join(
+        f"{pick(ppl, 'hf', z, 'bf16', 'ppl'):.2f} & {pick(gsm, 'hf', z, 'bf16', 'accuracy', 100):.1f} & "
+        f"{pick(mm, 'hf', z, 'bf16', 'accuracy', 100):.1f}" for z in sizes) + " \\\\", "\\midrule"]
+    for i, (b, p, name, bk, wa) in enumerate(spec):
+        if i == 3:
+            lines.append("\\midrule")
+        cells = [f"{ppl_delta(b, z, p)} & {acc_delta('gsm8k', gsm, b, z, p)} & {acc_delta('mmlu', mm, b, z, p)}"
+                 for z in sizes]
+        lines.append(f"{name} & {bk} & {wa} & " + " & ".join(cells) + " \\\\")
+    lines.append("\\midrule")
+    cells = [f"{ppl_delta('vllm', z, 'bf16')} & {acc_delta('gsm8k', gsm, 'vllm', z, 'bf16')} & "
+             f"{acc_delta('mmlu', mm, 'vllm', z, 'bf16')}" for z in sizes]
+    lines.append("BF16 (noise) & vLLM & 16/16 & " + " & ".join(cells) + " \\\\")
+    body = "\n".join(["\\begin{tabular}{lllrrrrrrrrr}", "\\toprule",
+                      " & & & \\multicolumn{3}{c}{Qwen2.5-3B} & \\multicolumn{3}{c}{Qwen2.5-7B} & "
+                      "\\multicolumn{3}{c}{Qwen2.5-14B} \\\\",
+                      "\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\\cmidrule(lr){10-12}",
+                      "Format & Backend & W/A & PPL & GSM8K & MMLU & PPL & GSM8K & MMLU & PPL & GSM8K & MMLU \\\\",
+                      "\\midrule", *lines, "\\bottomrule", "\\end{tabular}"])
+    write_tex("t_quality_main", body,
+              "Quality cost of each format. First row: BF16 values (WikiText-2 perplexity; GSM8K and MMLU accuracy "
+              "in \\%). Other rows: change against HF BF16 of the same model (accuracy in points). \\textbf{Bold}: "
+              f"significant after Bonferroni correction over the {n_tests.get('mmlu', 0)} comparisons per benchmark "
+              "(exact McNemar test). Last row: BF16 on vLLM, the noise floor.",
+              "tab:quality_main", size="\\footnotesize", sep="2.9pt", pos="t",
+              note="$^{\\ddagger}$Large only on raw text; on chat-formatted text this checkpoint matches the other "
+                   "14B formats (\\cref{sec:q4}).")
+
+
+def table_serving_main(size="7b"):
+    """Main-text serving table: throughput and latency at 1, 16 and 64 concurrent requests."""
+    vl, hf = A.serving()
+    if vl.empty:
+        return
+
+    def get(src, p, c, col, alt=None):
+        r = src[(src["size"] == size) & (src.precision == p) & (src.concurrency == c)] if not src.empty else src
+        if r.empty:
+            return np.nan
+        x = r.iloc[0]
+        v = x.get(col, np.nan)
+        return x.get(alt, np.nan) if (v is None or (isinstance(v, float) and np.isnan(v))) and alt else v
+
+    def n0(v):
+        return "--" if v is None or np.isnan(v) else f"{v:,.0f}"
+
+    lines = []
+    for b, p in ORDER:
+        if b == "vllm":
+            cells = [n0(get(vl, p, 1, "output_throughput")), fmt(get(vl, p, 1, "median_tpot_ms"), 1),
+                     n0(get(vl, p, 16, "output_throughput")), n0(get(vl, p, 16, "median_ttft_ms")),
+                     n0(get(vl, p, 64, "output_throughput")), fmt(get(vl, p, 64, "median_tpot_ms"), 1)]
+        else:
+            cells = ["--", "--", n0(get(hf, p, 16, "output_throughput")),
+                     n0(get(hf, p, 16, "p50_ttft_ms", "median_ttft_ms")), "--", "--"]
+        if all(c == "--" for c in cells):
+            continue
+        lines.append(f"{SHORT[(b, p)]}{' (static)' if b == 'hf' else ''} & " + " & ".join(cells) + " \\\\")
+        if (b, p) == ("hf", "nf4"):
+            lines.append("\\midrule")
+    body = "\n".join(["\\begin{tabular}{lrrrrrr}", "\\toprule",
+                      " & \\multicolumn{2}{c}{$C=1$} & \\multicolumn{2}{c}{$C=16$} & \\multicolumn{2}{c}{$C=64$} \\\\",
+                      "\\cmidrule(lr){2-3}\\cmidrule(lr){4-5}\\cmidrule(lr){6-7}",
+                      "Config & tok/s & TPOT & tok/s & TTFT & tok/s & TPOT \\\\", "\\midrule",
+                      *lines, "\\bottomrule", "\\end{tabular}"])
+    write_tex("t_serving_main", body,
+              f"Real traffic: 300 ShareGPT requests replayed against Qwen2.5-{size.upper()} with their reference answer "
+              "lengths. $C$ is the number of concurrent requests (HF runs static batches of 16). Output tokens per "
+              "second, and median TTFT and TPOT in ms.", "tab:serving_main", size="\\small", sep="5pt")
 
 
 def table_serving(size="7b"):
@@ -216,9 +349,9 @@ def table_serving(size="7b"):
                          "TPOT p50 / p99": f"{fmt(tpot, 1)} / {fmt(x.get('p99_tpot_ms'), 1)}"})
     if rows:
         write(pd.DataFrame(rows), "t_serving",
-              f"Real workload --- 300 ShareGPT requests replayed against Qwen2.5-{size.upper()} (reference output "
-              "lengths). $C$: concurrent closed-loop clients for vLLM, static batch size for HF. Throughput in "
-              "requests/s and output tokens/s; TTFT and TPOT in ms.", "tab:serving", colfmt="lrrrrr")
+              f"All serving results: 300 ShareGPT requests replayed against Qwen2.5-{size.upper()} (reference answer "
+              "lengths). $C$: concurrent clients for vLLM, static batch size for HF. Throughput in requests/s and "
+              "output tokens/s; TTFT and TPOT in ms (median / 99th percentile).", "tab:serving", colfmt="lrrrrr")
 
 
 def table_generalization(a="7b", b="q3-8b"):
@@ -245,14 +378,15 @@ def table_generalization(a="7b", b="q3-8b"):
                          configs.MODEL_LABEL[a]: dp(sa.get(f"d_{bench}_{p}", np.nan), sa.get(f"p_{bench}_{p}", np.nan)),
                          configs.MODEL_LABEL[b]: dp(sb.get(f"d_{bench}_{p}", np.nan), sb.get(f"p_{bench}_{p}", np.nan))})
     write(pd.DataFrame(rows), "t_generalization",
-          f"Generalization --- the headline results for {configs.MODEL_LABEL[a]} and {configs.MODEL_LABEL[b]} "
-          "(non-thinking mode) on the same grid ($L=512$, 128 output tokens). Throughput is compared at the largest batch "
-          f"at which both models' KV caches hold every request ($B={bc}$). Qwen3-8B has no official GPTQ checkpoint.",
+          f"The main results for {configs.MODEL_LABEL[a]} and {configs.MODEL_LABEL[b]} (non-thinking mode) on the "
+          "same grid (512-token prompts, 128 output tokens). Throughput is compared at the largest batch at which both "
+          f"models' KV caches hold every request ($B={bc}$). Qwen3-8B has no official GPTQ checkpoint.",
           "tab:general", colfmt="lrr")
 
 
 def main():
-    for f in (table_weights, table_speed, table_crossover, table_quality, table_serving, table_generalization):
+    for f in (table_weights, table_speed, table_crossover, table_quality, table_quality_main, table_serving,
+              table_serving_main, table_generalization):
         try:
             f()
         except Exception as e:  # keep going so partial results still produce tables

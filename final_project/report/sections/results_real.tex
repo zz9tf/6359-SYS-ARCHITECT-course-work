@@ -1,32 +1,8 @@
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{real_sharegpt_serving}
-\caption{Real workload --- 300 ShareGPT requests replayed against Qwen2.5-7B with their reference
-output lengths: vLLM served at 1--64 concurrent clients (lines), HF with static batches of 16
-(hollow markers). TTFT and TPOT are medians over requests.}
-\label{fig:serving}
-\end{figure*}
+\answer{Yes, and the serving system matters even more than the number format.}
+In a replay of 300 ShareGPT requests (\cref{tab:serving_main} in \cref{app:real}), AWQ-INT4 gives the lowest TPOT with
+one client (\SrvTPOTawqOne\,ms vs.\ \SrvTPOTbfOne\,ms for BF16), and FP8 the highest throughput with 64
+clients (\SrvThrFP{} vs.\ \SrvThrBF{} tokens/s), as the crossover of \cref{sec:q3} predicts. With the
+same 16 requests in flight, vLLM BF16 delivers \SrvGap{} the throughput of HF BF16, whose static
+batches wait for their longest prompt and longest answer (median TTFT \SrvTTFThf\,ms vs.\
+\SrvTTFTvlSixteen\,ms with continuous batching~\cite{yu2022orca}).
 
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{q4_quality_vs_memory}
-\caption{Q4 --- (a) GSM8K accuracy, (b) MMLU accuracy and (c) WikiText-2 perplexity of every
-Qwen2.5 configuration against its weight memory; lines connect the configurations of one model size.
-Hollow markers: HF + bitsandbytes; filled: vLLM.}
-\label{fig:quality}
-\end{figure*}
-
-Replaying 300 ShareGPT requests (\cref{fig:serving,tab:serving}; median prompt 31 tokens, median
-answer 284 tokens) confirms the controlled sweep under a realistic, decode-heavy mix. With one
-client the median TPOT falls from \SrvTPOTbfOne\,ms with BF16 to \SrvTPOTawqOne\,ms with AWQ-INT4
-and \SrvTPOTfpOne\,ms with FP8. As clients are added, continuous batching~\cite{yu2022orca} raises
-the throughput of every format, and the ranking shifts toward FP8: at 64 clients FP8 serves
-\SrvThrFP{} output tokens/s against \SrvThrAWQ{} for AWQ-INT4 and \SrvThrBF{} for BF16. The serving
-stack matters even more than the number format: with the same 16 requests in flight, vLLM BF16
-delivers \SrvGap{} the throughput of HF BF16 with static batching, and HF's quantized
-configurations are slower still (\SrvHFnf{} tokens/s for NF4 and \SrvHFint{} for LLM.int8()).
-Static batching pads every batch to its longest prompt and holds it until its longest answer is
-done, so its median TTFT is \SrvTTFThf\,ms against \SrvTTFTvlSixteen\,ms with continuous
-batching.
-
-\input{tables/t_serving}

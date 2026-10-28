@@ -1,32 +1,45 @@
-\documentclass[conference]{IEEEtran}
+\documentclass{article}
+
+% NeurIPS 2026 style; "preprint" gives the non-anonymous layout without line numbers
+\PassOptionsToPackage{numbers,compress,sort}{natbib}
+\usepackage[preprint]{neurips_2026}
+\makeatletter
+\renewcommand{\@noticestring}{CSE 6359 Advanced Topics in Systems \& Architecture, Fall 2026. Final project report.}
+\makeatother
+
+\usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{url}
 \usepackage{booktabs}
-\usepackage{siunitx}
-\usepackage{amsmath,amssymb}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{nicefrac}
 \usepackage{microtype}
 \usepackage{xcolor}
-\usepackage[hidelinks]{hyperref}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{placeins}
+\usepackage{siunitx}
 \usepackage[capitalise,noabbrev]{cleveref}
-\usepackage{balance}
 \sisetup{detect-all}
+\hypersetup{colorlinks=true, linkcolor=black!70!blue, citecolor=black!70!blue, urlcolor=black!70!blue}
 \graphicspath{{../figures/}}
 \renewcommand{\topfraction}{0.9}
-\renewcommand{\dbltopfraction}{0.9}
-\renewcommand{\textfraction}{0.07}
+\renewcommand{\textfraction}{0.1}
 \renewcommand{\floatpagefraction}{0.8}
-\renewcommand{\dblfloatpagefraction}{0.8}
 \setcounter{topnumber}{3}
-\setcounter{dbltopnumber}{2}
+\newcommand{\answer}[1]{\textbf{Answer:}~\emph{#1}}
 \input{numbers}
 
+\title{Smaller Is Not Always Faster:\\The Memory--Performance Trade-off of\\LLM Quantization on an RTX 5090}
+
+\author{%
+  Sijia Zhong \qquad Zheng Zheng \qquad Haofei Sun\\
+  Department of Computer Science and Engineering\\
+  The University of Texas at Arlington\\
+}
+
 \begin{document}
-
-\title{Smaller Is Not Always Faster:\\ The Memory--Performance Trade-off of LLM Quantization on an RTX 5090}
-
-\author{\IEEEauthorblockN{Sijia Zhong \qquad Zheng Zheng \qquad Haofei Sun}
-\IEEEauthorblockA{CSE 6359 Advanced Topics in Systems \& Architecture, Fall 2026\\
-The University of Texas at Arlington}}
 
 \maketitle
 
@@ -37,10 +50,10 @@ The University of Texas at Arlington}}
 \input{sections/results}
 \input{sections/discussion}
 
-\balance
-\bibliographystyle{IEEEtran}
+\bibliographystyle{abbrvnat}
 \bibliography{refs}
 
+\appendix
 \input{sections/appendix}
 
 \end{document}

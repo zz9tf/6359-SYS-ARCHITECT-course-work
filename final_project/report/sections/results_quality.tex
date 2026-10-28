@@ -1,48 +1,44 @@
-\Cref{tab:quality,fig:quality} measure quality three ways: WikiText-2 perplexity (language
-modeling), GSM8K (multi-step math reasoning, 1,319 questions) and MMLU (knowledge across 57
-subjects, 14,042 questions). Every accuracy comparison is paired: all configurations answer the same
-questions, so we test each difference against HF BF16 with an exact McNemar test on the questions
-where exactly one of the two runs is correct, and correct for the number of comparisons
-(Bonferroni) where we claim significance.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{q4_quality_vs_memory}
+\caption{\textbf{Q4: quality against weight memory} for every Qwen2.5 configuration. Lines connect the
+configurations of one model size; hollow markers: HF, filled: vLLM. A larger model in 4 bits beats a
+smaller model in 16 bits at less memory.}
+\label{fig:quality}
+\end{figure}
 
-\textbf{Noise floor.} Even two BF16 runs of the same weights disagree. vLLM and HF use different
-kernels and accumulation orders, and greedy decoding turns the resulting rounding differences into
-different reasoning chains: the two backends disagree on \BackendFlipsSeven{} of the 7B model's
-GSM8K questions and their accuracies differ by \BackendNoiseSeven{} points. On MMLU, where the
-answer is a single token, they differ by \MBackendNoiseSeven{} points (\MBackendNoiseThree{}
-on 3B). Differences of this size are not caused by quantization.
+\answer{8-bit formats keep quality. 4-bit formats cost a small but real amount, more on smaller
+models. At a fixed memory budget, a larger 4-bit model is still the better choice.}
 
-\textbf{8-bit formats preserve quality.} GPTQ-INT8 and FP8 W8A8 stay within \EightKernMax{} points
-of BF16 on both benchmarks for every model size and change perplexity by at most
-\PPLEightAbsSeven{} on the 7B model. On GSM8K, \EightSentence. The one measurable 8-bit cost is
-LLM.int8() on the 3B model, which changes MMLU accuracy by \IntMMLUThree{} points (\IntMMLUpThree;
-on 7B \IntMMLUSeven, \IntMMLUpSeven).
+\textbf{Noise floor.} \Cref{tab:quality_main} reports perplexity, multi-step math (GSM8K) and
+knowledge (MMLU). Even BF16 on two backends disagrees: the kernels round differently, and greedy
+decoding turns tiny differences into different reasoning chains. vLLM and HF disagree on
+\BackendFlipsSeven{} of the 7B model's GSM8K answers, yet their accuracies differ by only
+\BackendNoiseSeven{} points (MMLU: \MBackendNoiseSeven). Differences this small are not caused by
+quantization.
 
-\textbf{4-bit formats cost measurable quality, most on the smallest model.} MMLU resolves what
-GSM8K cannot. The 4-bit formats change MMLU accuracy by \MDFourMinThree{} to \MDFourMaxThree{}
-points on the 3B model, \MDFourMinSeven{} to \MDFourMaxSeven{} on 7B and \MDFourMinFourteen{} to
-\MDFourMaxFourteen{} on 14B; \MSigFourThree{}, \MSigFourSeven{} and \MSigFourFourteen{} of these
-drops remain significant after correcting for all \MNumTests{} MMLU comparisons. Perplexity tells
-the same story (\PPLFourMinSeven{} to \PPLFourMaxSeven{} on 7B, \PPLFourMinThree{} to
-\PPLFourMaxThree{} on 3B). On GSM8K, the 3B model's accuracy changes by \DFourMinThree{} to \DFourMaxThree{} points
-(\FourThreeSurvive{} significant after correction), while the 7B model's changes of
-\DFourMinSeven{} to \DFourMaxSeven{} points are within the noise of 1,319 questions. A smaller
-model has less redundancy to absorb the rounding error.
+\textbf{8-bit formats keep quality.} GPTQ-INT8 and FP8 stay within \EightKernMax{} points of BF16 on
+both benchmarks for all three sizes. On GSM8K, \EightSentence. The only measurable 8-bit cost is
+LLM.int8() on the 3B model (\IntMMLUThree{} MMLU points, \IntMMLUpThree).
 
-\textbf{Model size versus bit-width.} \Cref{fig:quality} places every configuration by its weight
-memory. \QualityGuide{} At a fixed memory budget, parameters are worth more than bits.
+\textbf{4-bit formats cost quality, most on small models.} The 4-bit formats change MMLU accuracy by
+\MDFourMinThree{} to \MDFourMaxThree{} points on 3B, \MDFourMinSeven{} to \MDFourMaxSeven{} on 7B and
+\MDFourMinFourteen{} to \MDFourMaxFourteen{} on 14B; \MSigFourThree, \MSigFourSeven{} and
+\MSigFourFourteen{} of these drops stay significant after the correction. On GSM8K, only the 3B model
+clearly loses accuracy (\DFourMinThree{} to \DFourMaxThree{} points). A smaller model has less spare
+capacity to absorb the rounding error.
 
-\textbf{One metric is not enough.} The 14B GPTQ-INT4 checkpoint scores \AccGPTQFourFourteenPct\%
-on GSM8K and changes MMLU accuracy by only \MGPTQFourFourteen{} points, on par with the other 14B formats, yet
-its WikiText-2 perplexity is \PPLGPTQFourFourteen{} against \PPLOthersFourteen{} for AWQ-INT4,
-GPTQ-INT8 and FP8. The outlier is not an artifact of our setup: it persists with BF16 instead of
-FP16 activations, the loss is elevated at every position of the 2048-token window, and the same
-harness scores the 7B GPTQ-INT4 checkpoint normally. Ranking the next token shows what happened.
-On raw WikiText the checkpoint predicts the next token correctly only \TopOneGPTQWiki\% of the time
-(\TopOneOthersWiki\% for the other 14B formats), whereas on chat-formatted GSM8K solutions it
-matches them (\TopOneGPTQChat\% vs.\ \TopOneOthersChat\%). The quantized weights still model the
-chat distribution they serve but have lost much of their general language modeling. The chat
-benchmarks alone would have missed this; perplexity alone would have rejected a checkpoint that
-works for chat.
+\textbf{Model size matters more than bit-width.} \QualityGuide{} At a fixed memory budget, parameters
+are worth more than bits (\cref{fig:quality}), as the scaling laws of Dettmers and
+Zettlemoyer~\cite{dettmers2023case} predict.
 
-\input{tables/t_quality}
+\textbf{One metric is not enough.} The 14B GPTQ-INT4 checkpoint matches the other 14B formats on
+GSM8K (\AccGPTQFourFourteenPct\%) and MMLU (\MGPTQFourFourteen{} points), but its WikiText-2
+perplexity is \PPLGPTQFourFourteen{} instead of \PPLOthersFourteen. The effect is real (it remains with
+BF16 activations and appears at every position). The checkpoint ranks the correct next token first
+for only \TopOneGPTQWiki\% of raw WikiText tokens (other 14B formats: \TopOneOthersWiki\%), but for
+\TopOneGPTQChat\% of chat-formatted GSM8K answers (others: \TopOneOthersChat\%): it keeps the chat
+format it serves but has lost much of its general language modeling. Task benchmarks alone would miss
+this; perplexity alone would reject a checkpoint that works for chat.
+
+\input{tables/t_quality_main}

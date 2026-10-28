@@ -1,7 +1,7 @@
-\begin{table*}[t]
+\begin{table}[htbp]
 \centering
 \footnotesize
-\caption{Q1 --- weight memory: naive estimate ($\#$params$\times$bits/8), our analytic model (unquantized embedding/LM head/norms + quantization metadata), and measured on the GPU.}
+\caption{Weight memory: the naive estimate ($\#$params$\times$bits/8), our model (embedding, LM head and norms stay in 16 bits; each format adds its scales), and the value measured on the GPU.}
 \label{tab:weights}
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{llrrrrr}
@@ -26,4 +26,4 @@ Qwen2.5-14B & vLLM AWQ W4A16 & 7.39 & 9.98 & 10.07 & 2.94$\times$ & 4.00$\times$
 Qwen2.5-14B & vLLM GPTQ W4A16 & 7.39 & 9.98 & 10.02 & 2.95$\times$ & 4.00$\times$ \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}

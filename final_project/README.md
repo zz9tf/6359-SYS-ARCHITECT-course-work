@@ -4,10 +4,12 @@
 CSE 6359 Advanced Topics in Systems & Architecture — Final Project, Fall 2026
 **Sijia Zhong · Zheng Zheng · Haofei Sun**
 
-📄 **Report:** [`report/main.pdf`](report/main.pdf) · 🎞️ **Slides:** [`slides/final_presentation.pptx`](slides/final_presentation.pptx) · 📝 Proposal: [`proposal/`](proposal/)
+📄 **Report:** [`report/main.pdf`](report/main.pdf) (NeurIPS 2026 format: 9-page main text + appendix) · 🎞️ **Slides:** [`slides/final_presentation.pptx`](slides/final_presentation.pptx) · 📝 Proposal: [`proposal/`](proposal/)
 
 <!-- KEY-FINDINGS -->
 ## Key findings
+
+![The bit-width does not predict the speedup](figures/teaser_speedup.png)
 
 1. **Memory — smaller, but not 4× smaller.** Only the decoder's linear layers shrink; the embedding,
    LM head, norms and quantization scales stay 16-bit. On Qwen2.5-7B, 4-bit weights save
@@ -86,7 +88,7 @@ CSE 6359 Advanced Topics in Systems & Architecture — Final Project, Fall 2026
 
 
 ![weights](figures/q1_weight_memory.png)
-![memory scaling](figures/q1_memory_scaling.png)
+![memory](figures/q1_memory_main.png)
 
 **Q2 — latency and throughput, Qwen2.5-7B, prompt 512, 128 output tokens**
 
@@ -228,7 +230,7 @@ final_project/
 │   └── make_figures.py · make_tables.py · make_numbers.py · make_readme.py
 ├── results/               raw measurements (*.jsonl), serving results, summaries (CSV/Markdown), env info
 ├── figures/               all figures (PDF for the report, PNG; slide versions in figures/slides/)
-├── report/                LaTeX source and PDF of the final report
+├── report/                LaTeX source (NeurIPS 2026 style) and PDF of the final report
 ├── slides/                final presentation (UTA template) and its build script
 └── proposal/              proposal slides and write-up
 ```

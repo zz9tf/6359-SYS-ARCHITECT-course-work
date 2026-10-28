@@ -1,48 +1,48 @@
-\section{Background}
+\section{Background and related work}
 \label{sec:background}
 
-\subsection{Two phases of LLM inference}
-Autoregressive generation runs in two phases with very different hardware behavior.
-In \emph{prefill}, all $L$ prompt tokens of each of the $B$ requests pass through the network at
-once, so every linear layer is a GEMM with $M = B\cdot L$ rows. Its cost determines the
-\emph{time to first token} (TTFT). In \emph{decode}, every step produces one new token per
-request, so the same weights are multiplied by a matrix with only $M = B$ rows. Its cost per step
-is the \emph{time per output token} (TPOT). The keys and values of all previous tokens are kept in
-a KV cache whose size grows with $B\cdot(L+N)$ for $N$ generated tokens.
+\textbf{Prefill and decode.} An LLM serves a request in two phases. \emph{Prefill} processes all $L$
+prompt tokens at once, so for a batch of $B$ requests each linear layer multiplies its weights by
+$M=B\cdot L$ rows; prefill sets the TTFT. \emph{Decode} then generates one token per request per step,
+so each layer sees only $M=B$ rows; one step takes one TPOT. The keys and values of earlier tokens
+are kept in the KV cache.
 
-\subsection{A roofline view of quantization}
-For a linear layer $y = xW^\top$ with $x\in\mathbb{R}^{M\times K}$ and $W\in\mathbb{R}^{N\times K}$
-stored with $b$ bytes per weight, the arithmetic intensity is
+\textbf{A roofline view.} The roofline model~\cite{williams2009roofline} tells which resource limits a
+kernel. For a linear layer $y=xW^\top$ with $x\in\mathbb{R}^{M\times K}$, $W\in\mathbb{R}^{N\times K}$
+and $b$ bytes per weight, the arithmetic intensity (operations per byte moved) is
 \begin{equation}
-  I(M) \;=\; \frac{2MNK}{b\,NK + 2MK + 2MN} \;\approx\; \frac{2M}{b}\quad (M \ll N, K).
+  I(M) \;=\; \frac{2MNK}{b\,NK + 2MK + 2MN} \;\approx\; \frac{2M}{b} \qquad (M \ll N, K).
   \label{eq:intensity}
 \end{equation}
-A kernel is memory-bound while $I(M)$ is below the GPU's ridge point
-$P_{\text{peak}}/BW$ and compute-bound above it~\cite{williams2009roofline}. With BF16 weights
-($b=2$), decode at small $B$ is deeply memory-bound: a step costs roughly the time needed to read
-every weight once. Storing weights in 4 bits ($b\approx0.5$) cuts these bytes by about $4\times$,
-which is the source of every decode-time speedup reported for weight-only quantization.
-Three things work against it. (i) The weights must be dequantized back to 16 bits before the
-tensor cores can use them, and this extra work is free only if a fused kernel hides it under the
-memory stream. (ii) Weight-only formats (W4A16, W8A16) still compute in BF16, so once $I(M)$
-reaches the ridge, at a $4\times$ smaller $M$ than BF16, the kernel is compute-bound and the
-dequantization overhead is no longer hidden. (iii) Prefill is compute-bound from the start, so
-weight-only formats cannot shorten TTFT. Formats that quantize the activations too (W8A8 in INT8
-or FP8~\cite{micikevicius2022fp8}) also raise the compute ceiling, because the tensor cores run
-8-bit math at twice the BF16 rate.
+The kernel is memory-bound when $I(M)$ is below the ridge point $R$ (peak FLOP/s divided by memory
+bandwidth) and compute-bound above it. On our GPU, $R\approx\RidgeBF$ FLOP/byte for BF16.
+\Cref{eq:intensity} gives three predictions, which we test in \cref{sec:results}:
+\begin{itemize}
+\item[\textbf{P1}] Small-batch decode is memory-bound, so fewer weight bytes should give a
+  proportional speedup, if the kernel hides the dequantization.
+\item[\textbf{P2}] Weight-only formats (W8A16, W4A16) still compute in BF16: their speedup shrinks
+  once they reach the compute roof ($M\approx bR/2$) and is gone once BF16 is compute-bound too
+  ($M\gtrsim R$). W8A8 formats use 8-bit tensor cores, at least twice as fast, so they stay faster.
+\item[\textbf{P3}] Prefill is compute-bound, so only W8A8 formats can shorten the TTFT.
+\end{itemize}
+The roofline leaves out the CPU time needed to launch each kernel. If this time exceeds the GPU time,
+the step is \emph{host-bound}, and no saving of bytes helps.
 
-\subsection{Quantization methods studied}
-\textbf{LLM.int8()}~\cite{dettmers2022llmint8} quantizes weights per output row and activations per
-token to INT8. Activation feature columns that contain any value above a threshold (6.0) are
-treated as outliers and multiplied in FP16 (mixed-precision decomposition).
-\textbf{NF4}~\cite{dettmers2023qlora} stores weights in the 4-bit NormalFloat format with one
-FP32 absmax scale per 64-weight block. Both are implemented in bitsandbytes and applied
-to the BF16 checkpoint at load time through Hugging Face Transformers~\cite{hfbnb}.
-\textbf{GPTQ}~\cite{frantar2023gptq} uses approximate second-order information to choose rounding
-that minimizes each layer's output error. \textbf{AWQ}~\cite{lin2024awq} instead rescales the
-weight channels that matter most for the activations before rounding. Both produce INT4 (or INT8)
-weights with one FP16 scale per group of 128 weights, and are executed in vLLM~\cite{kwon2023vllm}
-by the Marlin mixed-precision GEMM kernels~\cite{frantar2025marlin}. \textbf{FP8 W8A8} casts
-the weights to E4M3 at load time with one scale per tensor and quantizes the activations
-dynamically per token; vLLM runs it with CUTLASS FP8 GEMMs. SmoothQuant~\cite{xiao2023smoothquant} motivates the W8A8 design by moving
-activation outliers into the weights; we use FP8 as its hardware-native counterpart on Blackwell.
+\textbf{Formats.} LLM.int8()~\cite{dettmers2022llmint8} (INT8 weights and activations, with large
+activation columns kept in FP16) and NF4~\cite{dettmers2023qlora} (4-bit NormalFloat weights) come
+from bitsandbytes and run in Hugging Face Transformers~\cite{hfbnb}. GPTQ~\cite{frantar2023gptq} and
+AWQ~\cite{lin2024awq} choose the rounding with second-order or activation information and store INT4
+or INT8 weights; vLLM~\cite{kwon2023vllm} runs them with Marlin kernels~\cite{frantar2025marlin}.
+FP8~\cite{micikevicius2022fp8} stores weights and activations in an 8-bit float that recent GPUs
+support in hardware: the floating-point form of W8A8, which SmoothQuant~\cite{xiao2023smoothquant}
+enables for INT8.
+
+\textbf{Related work.} QServe~\cite{lin2025qserve} notes that W4A16 kernels lose their advantage in
+large-batch serving; other work quantizes activations to 4 bits~\cite{ashkboos2024quarot} or
+compresses the KV cache~\cite{liu2024kivi,hooper2024kvquant}. Dettmers and
+Zettlemoyer~\cite{dettmers2023case} show that 4-bit models give the best accuracy for a fixed number
+of model bits. Jin et al.~\cite{jin2024comprehensive} and Li et al.~\cite{li2024evaluating} compare
+methods on accuracy, and Jin et al.\ note that quantization can slow inference down. Closest to us,
+Kurtic et al.~\cite{kurtic2024give} find on data-center GPUs that W4A16 suits latency-bound use and
+W8A8 suits high-throughput serving. We confirm this on a consumer GPU and add the Hugging Face path,
+memory at run time, and a kernel-level explanation of every crossover.

@@ -1,41 +1,138 @@
-\appendices
-\section{Qwen2.5-3B}
-\label{app:3b}
-\Cref{fig:latency3b,fig:heatmaps3b} repeat the latency and crossover analysis for the 3B model.
-The vLLM picture is the same as for 7B. On HF the smaller model is worse off: its BF16 step is
-already bound by host overhead (\TPOTbfHFThree\,ms per step against a \FloorThree\,ms
-memory floor), so fewer bytes cannot help, NF4 never beats BF16, and LLM.int8() falls to
-\IntThreeWorst{} of BF16 speed because the 36-layer model launches more kernels per step than the
-28-layer 7B model.
+\section{Additional memory results}
+\label{app:memory}
 
-\begin{figure*}[t]
+\Cref{fig:weights,tab:weights} give the weight memory of every configuration and model size.
+\Cref{fig:breakdown} splits the peak memory of the 7B model on HF into weights, KV cache and
+activations. It shows why the run-time saving shrinks: as the batch grows, the KV cache and the
+activations take a growing share of the peak memory, and neither is quantized. \Cref{fig:kvcap} shows the
+KV-cache capacity that vLLM gets from the memory each format frees.
+
+\begin{figure}[htbp]
 \centering
-\includegraphics[width=\textwidth]{q2_latency_throughput_3b}
-\caption{Latency and throughput of Qwen2.5-3B (same layout as \cref{fig:latency}).}
-\label{fig:latency3b}
-\end{figure*}
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.8\textwidth]{q3_speedup_heatmaps_3b}
-\caption{End-to-end speedup over BF16 for Qwen2.5-3B (same layout as \cref{fig:heatmaps}).}
-\label{fig:heatmaps3b}
-\end{figure*}
-
-\section{Detailed results}
-\label{app:tables}
-\Cref{tab:weights,tab:speed} list the weight memory of every configuration of the 7B and 14B
-models and the latency, throughput and energy of the 7B model behind \cref{fig:weights,fig:latency}.
+\includegraphics[width=\linewidth]{q1_weight_memory}
+\caption{Weight memory of every configuration for the three Qwen2.5 sizes (bars: measured; black
+ticks: $\#\text{params}\times\text{bits}/8$). Labels give the saving against BF16 on the same backend.}
+\label{fig:weights}
+\end{figure}
 
 \input{tables/t_weight_memory}
-\input{tables/t_speed}
 
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{q1_memory_breakdown}
+\caption{Peak allocated memory of Qwen2.5-7B on HF with 2048-token prompts, split into weights, KV
+cache and activations. OOM: out of memory.}
+\label{fig:breakdown}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{q1_kv_capacity}
+\caption{KV-cache capacity that vLLM allocates with 85\% of the GPU after loading the weights.}
+\label{fig:kvcap}
+\end{figure}
+
+\FloatBarrier
+\section{Additional speed results}
+\label{app:speed}
+
+\Cref{tab:speed} lists the latency, throughput and energy numbers behind \cref{fig:latency}, and
+\cref{tab:crossover} lists where each format stops paying off (\cref{fig:heatmaps}).
+\Cref{fig:energy} shows the energy per output token. GPU power stays close to the board limit in
+every configuration (\PowerRange\,W), so energy per token follows latency. LLM.int8() draws little
+power (\PowerInt\,W) but runs so long that it uses the most energy per token. \Cref{fig:outlen}
+shows how the answer length moves the speedup (\cref{sec:q3}).
+
+\input{tables/t_speed}
+\input{tables/t_crossover}
+
+\begin{figure}[htbp]
+\centering
+\begin{minipage}[t]{0.46\linewidth}
+\centering
+\includegraphics[width=\linewidth]{energy_per_token}
+\caption{GPU energy per output token (NVML), Qwen2.5-7B, 512-token prompts.}
+\label{fig:energy}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.5\linewidth}
+\centering
+\includegraphics[width=\linewidth]{q3_output_length}
+\caption{End-to-end speedup over BF16 against the number of generated tokens (Qwen2.5-7B, 512-token
+prompts). Longer answers raise the share of decode, and with it the gain of weight-only formats.}
+\label{fig:outlen}
+\end{minipage}
+\end{figure}
+
+\textbf{Qwen2.5-3B.} \Cref{fig:latency3b,fig:heatmaps3b} repeat the latency and crossover analysis
+for the 3B model. On vLLM the picture is the same as for 7B. On HF the smaller model is worse off. Its
+BF16 step is already limited by the host (\TPOTbfHFThree\,ms per step against a memory floor of
+\FloorThree\,ms), so fewer bytes cannot help: NF4 never beats BF16, and LLM.int8() falls to
+\IntThreeWorst{} of the BF16 speed, because the 36-layer model launches more kernels per step than
+the 28-layer 7B model.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{q2_latency_throughput_3b}
+\caption{Latency and throughput of Qwen2.5-3B (same layout as \cref{fig:latency}).}
+\label{fig:latency3b}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{q3_speedup_heatmaps_3b}
+\caption{End-to-end speedup over BF16 for Qwen2.5-3B (same layout as \cref{fig:heatmaps}).}
+\label{fig:heatmaps3b}
+\end{figure}
+
+\FloatBarrier
+\section{Real-traffic details}
+\label{app:real}
+
+\Cref{tab:serving_main} summarizes the ShareGPT replay of \cref{sec:real}. \Cref{fig:workload} shows
+the lengths of the 300 requests, and \cref{fig:serving,tab:serving} give the full serving results,
+including the 99th-percentile latencies.
+
+\input{tables/t_serving_main}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{workload_sharegpt}
+\caption{Prompt and answer lengths of the 300 ShareGPT requests used in the replay.}
+\label{fig:workload}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{real_sharegpt_serving}
+\caption{The ShareGPT replay against Qwen2.5-7B: vLLM at 1 to 64 concurrent clients (lines) and HF
+with static batches of 16 (hollow markers). TTFT and TPOT are medians over requests.}
+\label{fig:serving}
+\end{figure}
+
+\input{tables/t_serving}
+
+\FloatBarrier
+\section{Full quality results}
+\label{app:quality}
+
+\Cref{tab:quality} lists every quality number with its $p$-value, for all five models.
+
+\input{tables/t_quality}
+
+\FloatBarrier
+\section{Generalization details}
+\label{app:general}
+
+\Cref{tab:general} compares Qwen2.5-7B and Qwen3-8B on the same grid.
+
+\input{tables/t_generalization}
+
+\FloatBarrier
 \section{Reproducibility}
 \label{app:repro}
-Every number in this report is generated from the raw measurements by
-\texttt{scripts/make\_numbers.py}; figures and tables come from \texttt{make\_figures.py} and
-\texttt{make\_tables.py}. \texttt{run\_all.sh} re-runs all experiments
-(about twelve GPU-hours on an RTX 5090). A job queue ran the experiments one at a time and only
-while no other user's process was on the GPU; rows written while the GPU was shared
-(\ExcludedWindows, logged in \texttt{results/excluded\_windows.jsonl}) are discarded and those jobs
-were re-run. \RecheckSentence
+Every number in this report is computed from the raw measurements by \texttt{scripts/make\_numbers.py},
+and the figures and tables come from \texttt{make\_figures.py} and \texttt{make\_tables.py}.
+\texttt{run\_all.sh} runs all experiments again (about twelve GPU-hours on an RTX 5090). A job queue
+ran the experiments one at a time, and only while no other user's process was on the GPU. Rows
+written while the GPU was shared (\ExcludedWindows, logged in \texttt{results/excluded\_windows.jsonl})
+were discarded and those jobs were run again. \RecheckSentence

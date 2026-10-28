@@ -1,7 +1,7 @@
-\begin{table}[t]
+\begin{table}[htbp]
 \centering
-\footnotesize
-\caption{Real workload --- 300 ShareGPT requests replayed against Qwen2.5-7B (reference output lengths). $C$: concurrent closed-loop clients for vLLM, static batch size for HF. Throughput in requests/s and output tokens/s; TTFT and TPOT in ms.}
+\small
+\caption{All serving results: 300 ShareGPT requests replayed against Qwen2.5-7B (reference answer lengths). $C$: concurrent clients for vLLM, static batch size for HF. Throughput in requests/s and output tokens/s; TTFT and TPOT in ms (median / 99th percentile).}
 \label{tab:serving}
 \setlength{\tabcolsep}{3.2pt}
 \begin{tabular}{lrrrrr}

@@ -1,29 +1,26 @@
-To check that the conclusions are not specific to Qwen2.5, we repeated the core measurements on
-Qwen3-8B~\cite{qwen3}, a newer model with a different layout (\FamRLayers{} layers and \FamRKVheads{}
-KV heads against \FamQLayers{} and \FamQKVheads{} for Qwen2.5-7B), run in non-thinking mode.
-\Cref{tab:general} compares the two on the same grid.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{general_qwen3}
+\caption{\textbf{Generalization.} (a)~Decode speedup and (b)~MMLU change against BF16 for Qwen2.5-7B
+and Qwen3-8B. (c)~Qwen3 MMLU accuracy against weight memory: Qwen3-32B fits only in 4 bits, and it
+beats Qwen3-8B in BF16.}
+\label{fig:general}
+\end{figure}
 
-The systems results carry over almost unchanged. 4-bit weights shrink by \FamRAWQsave{} rather than
-$4\times$; at batch size one AWQ-INT4 decodes \FamRAWQone{} faster (\FamQAWQone{} for Qwen2.5-7B),
-FP8 \FamRFPone{} faster, and LLM.int8() runs at \FamRINTone{} of the BF16 speed. At $B=\FamRBcmp$
-FP8 still raises throughput by \FamRFPthr{} while AWQ-INT4 has fallen to \FamRAWQthr. The one
-difference confirms the host-overhead explanation of \cref{sec:mechanism}: NF4, \FamQNFone{} faster
-than BF16 on the 28-layer Qwen2.5-7B, is \FamRNFone{} on the 36-layer Qwen3-8B, just as it was
-slower on the 36-layer Qwen2.5-3B. More layers mean more kernel launches per decode step, and the
-step becomes bound by the host rather than by memory. Qwen3-8B also stores \FamKVratio{} as many
-KV-cache bytes per token, so at $B=256$ none of its configurations fits the cache; the memory a
-format saves on weights matters even more for such models. \FamQualitySentence
+\answer{The systems results carry over to a newer model family. The quality order of the formats
+does not, so it must be measured for each model.}
 
-\textbf{Scaling up: Qwen3-32B.} At 32B parameters the question changes from speed to feasibility.
-Qwen3-32B needs \BigBFw\,GB in BF16 and about half of that in FP8 or INT8, more than the GPU's
-32\,GB, so on this GPU it runs only at 4 bits: AWQ-INT4 takes \BigAWQw\,GB and leaves room for
-\BigAWQkv{} cached tokens, and NF4 takes \BigNFw\,GB. Against Qwen3-8B in BF16 (\SmallBFw\,GB, a
-similar budget), the 4-bit 32B model needs \BigAWQtpot\,ms per decoded token at batch size one
-(vLLM; 8B BF16: \SmallBFtpot\,ms) and scores \BigGSMawq\% vs.\ \SmallGSMbf\% on GSM8K
-(\BigGAWQp) and \BigMMLUawq\% vs.\ \SmallMMLUbf\% on MMLU (\BigMAWQp). \BigVerdict{} One caveat is
-numerical: the AWQ checkpoint ships FP16 activations, and in \BigNaNwin{} perplexity windows the
-activations overflow beyond the first 512 positions and the loss becomes NaN; with BF16
-activations every window is finite (perplexity \BigPPLawq), so long-context use of this
-checkpoint should run in BF16.
+\textbf{Qwen3-8B} has \FamRLayers{} layers and \FamRKVheads{} KV heads (Qwen2.5-7B: \FamQLayers{} and
+\FamQKVheads) and runs in non-thinking mode. The systems results carry over (\cref{fig:general}a,
+\cref{app:general}): at batch size~1, AWQ-INT4 decodes \FamRAWQone{} faster than BF16 (Qwen2.5-7B:
+\FamQAWQone), FP8 \FamRFPone{}, and LLM.int8() runs at \FamRINTone{} of the BF16 speed. The one
+difference supports the host-overhead explanation: NF4, \FamQNFone{} faster on the 28-layer
+Qwen2.5-7B, runs at \FamRNFone{} of the BF16 speed on the 36-layer Qwen3-8B. \FamQualitySentence
 
-\input{tables/t_generalization}
+\textbf{Qwen3-32B} raises a different question: does the model fit at all? Its BF16 weights need
+\BigBFw\,GB and 8-bit weights about half of that, more than the GPU's 32\,GB, so it runs only in 4
+bits (AWQ-INT4: \BigAWQw\,GB plus \BigAWQkv{} cached tokens; NF4: \BigNFw\,GB). Compared with
+Qwen3-8B in BF16 (\SmallBFw\,GB; \cref{fig:general}c), it needs \BigAWQtpot{} vs.\ \SmallBFtpot\,ms per
+token at batch size~1 and scores \BigGSMawq\% vs.\ \SmallGSMbf\% on GSM8K (\BigGAWQp) and
+\BigMMLUawq\% vs.\ \SmallMMLUbf\% on MMLU (\BigMAWQp). \BigVerdict{} (With the checkpoint's FP16
+activations, \BigNaNwin{} perplexity windows overflow; BF16 activations fix this.)
