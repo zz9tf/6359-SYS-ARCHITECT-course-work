@@ -61,7 +61,6 @@ INT8 needs \LoadIntEightSeven\,s to load the 7B model, \LoadIntRatio{} longer th
 \label{fig:kvcap}
 \end{figure}
 
-\input{tables/t_weight_memory}
 
 \subsection{Q2: latency and throughput}
 \label{sec:q2}
@@ -94,7 +93,6 @@ slower on the 3B model, whose BF16 step is already limited by the host rather th
 $B=256$, vLLM BF16 produces \ThrBFmax{} tokens/s and AWQ-INT4 \ThrAWQmax{}---no gain from a
 $4\times$ smaller weight format---while FP8 reaches \ThrFPmax{}, \ThrFPratio{} the BF16 rate.
 
-\input{tables/t_speed}
 
 \subsection{Q3: when does lower precision pay off?}
 \label{sec:q3}
@@ -196,3 +194,7 @@ token.
 \caption{GPU energy per generated token (NVML energy counter), Qwen2.5-7B, $L=512$.}
 \label{fig:energy}
 \end{figure}
+
+\subsection{Does it generalize? Qwen3-8B}
+\label{sec:general}
+\input{sections/results_general}

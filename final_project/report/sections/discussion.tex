@@ -36,8 +36,8 @@ We measured how much memory LLM quantization saves and when it makes inference f
 eight configurations of Qwen2.5 models on an RTX 5090. Memory savings are real but smaller than
 advertised: \WtNFSeven{} instead of $4\times$ for 4-bit weights, and as little as \MemBigNF{} end
 to end once the KV cache grows. Speed depends on the kernel and the regime rather than on the
-bit-width: the same 4-bit weights run \AWQspeedup{} faster than BF16 with Marlin and slower with
-bitsandbytes, weight-only gains disappear in the compute-bound regime, and FP8 W8A8 is the only
+bit-width: the same 8-bit weights decode \GPTQeightspeedup{} faster than BF16 with Marlin and
+\INTeightslowdown{} slower with bitsandbytes, weight-only gains disappear in the compute-bound regime, and FP8 W8A8 is the only
 format that is faster everywhere. \QualityConclusion{} Smaller is not always faster---but with the
 right kernel, for the right regime, it is both smaller and faster.
 

@@ -24,7 +24,7 @@ embedding, the LM head and the norms stay in 16-bit.
 \centering\footnotesize
 \caption{Configurations. W/A: weight/activation precision during the GEMM.}
 \label{tab:configs}
-\setlength{\tabcolsep}{3pt}
+\setlength{\tabcolsep}{2.4pt}
 \begin{tabular}{llllll}
 \toprule
 Backend & Name & W/A & Method & Kernel & Source \\
@@ -58,6 +58,9 @@ HF processes them in arrival order in static batches of 16.
 non-overlapping 2048-token windows of the raw test split. GSM8K~\cite{cobbe2021gsm8k} accuracy
 uses all 1,319 test questions with zero-shot chain-of-thought (Qwen's ``reason step by step,
 answer in \texttt{\textbackslash boxed\{\}}'' instruction) and greedy decoding up to 512 tokens.
+MMLU~\cite{hendrycks2021mmlu} accuracy uses all 14,042 test questions zero-shot; the prediction is
+the option letter the model scores highest as the first token of its answer. Instruct models are
+prompted through their chat template; Qwen3 runs in non-thinking mode.
 
 \subsection{Metrics and protocol}
 On HF, a streamer timestamps every token that \texttt{generate} emits; each emission copies the

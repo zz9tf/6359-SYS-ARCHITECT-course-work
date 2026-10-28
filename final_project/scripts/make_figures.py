@@ -536,6 +536,39 @@ def fig_outlen(size="7b"):
     save(fig, "q3_output_length")
 
 
+def fig_generalization():
+    """Qwen2.5-7B vs Qwen3-8B: decode speedup at B=1 and MMLU change, per format (slides)."""
+    fq, fr = A.family_pair("7b", "q3-8b")
+    if not fr:
+        return
+    cfg = [("awq-int4", "AWQ-INT4\n(vLLM)"), ("fp8", "FP8\n(vLLM)"), ("nf4", "NF4\n(HF)"), ("int8", "LLM.int8()\n(HF)")]
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.0, 3.0))
+    x = np.arange(len(cfg))
+    for ax, key, yl, title in ((ax1, "tpot_b1_{}", "decode speedup over BF16", "(a) Decode speedup, B = 1"),
+                               (ax2, "d_mmlu_{}", "MMLU change (points)", "(b) MMLU change vs BF16")):
+        for j, (fs, lab, col) in enumerate(((fq, "Qwen2.5-7B", S.MUTED), (fr, "Qwen3-8B", S.BLUE))):
+            v = [fs.get(key.format(c), np.nan) for c, _ in cfg]
+            bars = ax.bar(x + (j - 0.5) * 0.38, v, 0.36, color=col, label=lab)
+            for b_, val in zip(bars, v):
+                if np.isnan(val):
+                    continue
+                txt = f"{val:.2f}\u00d7" if key.startswith("tpot") else f"{val:+.1f}".replace("-", "\u2212")
+                ax.annotate(txt, (b_.get_x() + b_.get_width() / 2, val), xytext=(0, 3 if val >= 0 else -3),
+                            textcoords="offset points", ha="center", va="bottom" if val >= 0 else "top",
+                            fontsize=7 * FS, color=S.INK2)
+        ax.axhline(1 if key.startswith("tpot") else 0, color=S.INK2, lw=0.8, ls=":")
+        ax.set_xticks(x)
+        ax.set_xticklabels([l for _, l in cfg])
+        ax.set_ylabel(yl)
+        ax.set_title(title)
+        ax.grid(axis="x", visible=False)
+    lo = min(fq.get("d_mmlu_awq-int4", 0), fr.get("d_mmlu_awq-int4", 0), -1)
+    ax2.set_ylim(lo * 1.45, 0.6)
+    ax1.legend(loc="upper right", frameon=False)
+    fig.tight_layout()
+    save(fig, "general_qwen3")
+
+
 # ----------------------------------------------------------------------------- Q4 quality
 def fig_quality():
     ppl, gsm = A.quality()
@@ -550,11 +583,15 @@ def fig_quality():
         r = vl[(vl["size"] == size) & (vl.precision == p)] if not vl.empty else vl
         return r.load_gib.iloc[0] * A.GIB / A.GB if len(r) and r.load_gib.notna().iloc[0] else np.nan
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.0, 3.2))
-    for df, ax, col, yl in ((gsm, ax1, "accuracy", "GSM8K accuracy (%)"), (ppl, ax2, "ppl", "WikiText-2 perplexity")):
+    mm = A.mmlu()
+    panels = [(gsm, "accuracy", "GSM8K accuracy (%)"), (ppl, "ppl", "WikiText-2 perplexity")]
+    if not mm.empty:
+        panels.insert(1, (mm, "accuracy", "MMLU accuracy (%)"))
+    fig, axes = plt.subplots(1, len(panels), figsize=(4.6 * len(panels) - 0.2, 3.2))
+    for (df, col, yl), ax in zip(panels, axes):
         if df.empty:
             continue
-        df = df.copy()
+        df = df[df["size"].isin(list(SIZE_LABEL))].copy()   # Qwen2.5 family; Qwen3-8B has its own table
         df["mem"] = [mem(b, s, p) for b, s, p in zip(df.backend, df["size"], df.precision)]
         df = df[~((df.backend == "vllm") & (df.precision == "bf16") & df["size"].isin(["3b", "7b"]))]  # HF row is the BF16 reference
         cap = None
@@ -590,13 +627,16 @@ def fig_quality():
     acc = {(b, s_, p): a for b, s_, p, a in zip(gsm.backend, gsm["size"], gsm.precision, gsm.accuracy)} if not gsm.empty else {}
     a14, a7 = acc.get(("vllm", "14b", "awq-int4")), acc.get(("hf", "7b", "bf16"))
     wins = a14 is not None and a7 is not None and a14 > a7
-    ax1.set_title("(a) Accuracy vs memory: bigger-but-quantized wins" if wins else "(a) GSM8K accuracy vs weight memory")
-    ax2.set_title("(b) Perplexity vs memory (lower is better)")
+    titles = ["GSM8K: bigger-but-quantized wins" if wins else "GSM8K accuracy"] + \
+        (["MMLU accuracy"] if not mm.empty else []) + ["Perplexity (lower is better)"]
+    for i, (ax, t) in enumerate(zip(axes, titles)):
+        ax.set_title(f"({'abc'[i]}) {t}")
     handles = [Line2D([], [], color=S.COLOR[p], marker=S.MARKER[p], markerfacecolor="white" if b == "hf" else S.COLOR[p],
                       ls="none", label=S.LABEL[(b, p)])
                for b, p in (("hf", "bf16"), ("hf", "int8"), ("hf", "nf4"), ("vllm", "fp8"), ("vllm", "gptq-int8"),
                             ("vllm", "awq-int4"), ("vllm", "gptq-int4"))]
-    fig.legend(handles=handles, loc="lower center", ncol=4, bbox_to_anchor=(0.5, -0.13), fontsize=7.5 * FS)
+    fig.legend(handles=handles, loc="lower center", ncol=7 if len(panels) == 3 else 4,
+               bbox_to_anchor=(0.5, -0.08 if len(panels) == 3 else -0.13), fontsize=7.5 * FS)
     fig.tight_layout()
     save(fig, "q4_quality_vs_memory")
 

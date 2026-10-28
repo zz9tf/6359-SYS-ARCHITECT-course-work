@@ -14,6 +14,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from quantbench import analysis as A  # noqa: E402
+from quantbench import memory as M  # noqa: E402
 from quantbench.results import ROOT  # noqa: E402
 
 NUMS = {}
@@ -444,6 +445,80 @@ def main():
                  if not surv else f", significant even after a Bonferroni correction over the {len(fam)} comparisons"))
         sig4_3 = [r for r in fam if r[0] == "3b" and (r[1], r[2]) in four]
         put("FourThreeSurvive", f"{sum(r[4] < alpha for r in sig4_3)} of {len(sig4_3)}")
+    # MMLU: same comparisons, Bonferroni within the MMLU family
+    mm = A.mmlu()
+    macc = mm.set_index(["backend", "size", "precision"]).accuracy * 100 if not mm.empty else pd.Series(dtype=float)
+    mfam = []
+    for size in ("3b", "7b", "14b"):
+        for b, p_ in eight + four:
+            t = A.paired("mmlu", ("hf", size, "bf16"), (b, size, p_))
+            if t:
+                mfam.append((size, (b, p_), t["delta_pp"], t["p_value"]))
+    if mfam:
+        malpha = 0.05 / len(mfam)
+        put("MNumTests", len(mfam), "{:d}")
+        for size, tag in (("3b", "Three"), ("7b", "Seven"), ("14b", "Fourteen")):
+            put(f"MMLUBF{tag}", float(macc.get(("hf", size, "bf16"), float("nan"))), "{:.1f}")
+            r8 = [r for r in mfam if r[0] == size and r[1] in eight]
+            r4 = [r for r in mfam if r[0] == size and r[1] in four]
+            if r8:
+                put(f"MDEightAbs{tag}", max(abs(r[2]) for r in r8), "{:.1f}")
+                put(f"MSigEight{tag}", f"{sum(r[3] < malpha for r in r8)} of {len(r8)}")
+            if r4:
+                put(f"MDFourMin{tag}", sg(min(r[2] for r in r4)))
+                put(f"MDFourMax{tag}", sg(max(r[2] for r in r4)))
+                put(f"MSigFour{tag}", f"{sum(r[3] < malpha for r in r4)} of {len(r4)}")
+            t = A.paired("mmlu", ("hf", size, "bf16"), ("vllm", size, "bf16"))
+            if t:
+                put(f"MBackendNoise{tag}", abs(t["delta_pp"]), "{:.1f}")
+    # 8-bit kernels (GPTQ-INT8, FP8) on both benchmarks; LLM.int8() and 4-bit costs on MMLU
+    kern8 = []
+    for bench in ("gsm8k", "mmlu"):
+        for size in ("3b", "7b", "14b"):
+            for b, p_ in (("vllm", "gptq-int8"), ("vllm", "fp8")):
+                t = A.paired(bench, ("hf", size, "bf16"), (b, size, p_))
+                if t:
+                    kern8.append(abs(t["delta_pp"]))
+    if kern8:
+        put("EightKernMax", max(kern8), "{:.1f}")
+    for size, tag in (("3b", "Three"), ("7b", "Seven")):
+        t = A.paired("mmlu", ("hf", size, "bf16"), ("hf", size, "int8"))
+        if t:
+            put(f"IntMMLU{tag}", sg(t["delta_pp"]))
+            put(f"IntMMLUp{tag}", "$p<0.001$" if t["p_value"] < 0.001 else f"$p={t['p_value']:.2f}$")
+    t = A.paired("mmlu", ("hf", "14b", "bf16"), ("vllm", "14b", "gptq-int4"))
+    if t:
+        put("MGPTQFourFourteen", sg(t["delta_pp"]))
+    mm14 = float(macc.get(("vllm", "14b", "awq-int4"), float("nan"))) if mfam else float("nan")
+    mm7 = float(macc.get(("hf", "7b", "bf16"), float("nan"))) if mfam else float("nan")
+    put("MMLUAWQFourteen", mm14, "{:.1f}")
+    t = A.paired("mmlu", ("hf", "7b", "bf16"), ("vllm", "14b", "awq-int4"))
+    put("MMLUBigP", ("$p<0.001$" if t["p_value"] < 0.001 else f"$p={t['p_value']:.3f}$") if t else "n/a")
+    m4 = [r[2] for r in mfam if r[1] in four] if mfam else []
+    if m4:
+        put("MFourMin", sg(min(m4)))
+        put("MFourMax", sg(max(m4)))
+    # headline quality sentences once both benchmarks are in (override the GSM8K-only versions)
+    if kern8 and m4 and ok(mm14) and ok(mm7):
+        big = ok(a14) and ok(a7) and a14 > a7 and mm14 > mm7
+        k8 = max(kern8)
+        int3 = NUMS.get("IntMMLUThree", "n/a")
+        lo, hi = -max(m4), -min(m4)
+        put("QualityAbstract", f"Quality depends on the bit-width and the model size: GPTQ-INT8 and FP8 stay within "
+            f"{k8:.1f} points of BF16 on GSM8K and MMLU, whereas 4-bit formats cost {lo:.1f}--{hi:.1f} MMLU points, most "
+            "on the smallest model" + (f"; still, a 14B model in AWQ-INT4 ({m14:.1f}\\,GB) beats the 7B model in BF16 "
+                                         f"({m7:.1f}\\,GB) on both benchmarks." if big else "."))
+        put("QualityConclusion", f"8-bit formats with good kernels preserve quality; 4-bit formats cost {lo:.1f}--{hi:.1f} "
+            "MMLU points, more on smaller models" + (", yet a larger 4-bit model still beats a smaller 16-bit one at less "
+                                                 "memory." if big else "."))
+        if big:
+            put("QualityGuide", f"Qwen2.5-14B in AWQ-INT4 needs {m14:.1f}\\,GB of weights, less than the {m7:.1f}\\,GB "
+                f"of Qwen2.5-7B in BF16, and scores {a14:.1f}\\% vs.\\ {a7:.1f}\\% on GSM8K and {mm14:.1f}\\% vs.\\ "
+                f"{mm7:.1f}\\% on MMLU (McNemar {p14} and {NUMS['MMLUBigP']}).")
+        put("QualityReadme", f"GPTQ-INT8 and FP8 stay within {k8:.1f} points of BF16 on GSM8K and MMLU (LLM.int8() costs "
+            f"{int3.replace('$', '').lstrip('-+')} MMLU points on 3B); 4-bit formats cost {lo:.1f}–{hi:.1f} MMLU points, most on the "
+            "smallest model" + (f"; Qwen2.5-14B in AWQ-INT4 ({m14:.1f} GB) beats Qwen2.5-7B in BF16 ({m7:.1f} GB) on GSM8K "
+                                f"({a14:.1f}% vs {a7:.1f}%) and MMLU ({mm14:.1f}% vs {mm7:.1f}%)." if big else "."))
     put("AccBFThree", g("hf", "3b", "bf16"), "{:.1f}")
     for k, (b, sz, p) in {"AccAWQFourteen": ("vllm", "14b", "awq-int4"), "AccFPFourteen": ("vllm", "14b", "fp8"),
                           "AccGPTQFourFourteen": ("vllm", "14b", "gptq-int4"), "AccBFFourteen": ("hf", "14b", "bf16"),
@@ -471,6 +546,53 @@ def main():
     if q14:
         put("PPLOthersFourteen", f"{min(q14):.2f}--{max(q14):.2f}")
     put("AccGPTQFourFourteenPct", g("vllm", "14b", "gptq-int4"), "{:.1f}")
+
+    # ------------------------------------------------------------------ second model family (Qwen3-8B)
+    pair = dict(zip(("7b", "q3-8b"), A.family_pair("7b", "q3-8b")))
+    for size, tag in (("7b", "Q"), ("q3-8b", "R")):     # Q = Qwen2.5-7B, R = Qwen3-8B, same grid
+        fs = pair[size]
+        if not fs:
+            continue
+        put(f"Fam{tag}Bcmp", fs.get("b_cmp", float("nan")), "{:.0f}")
+        put(f"Fam{tag}Bfit", fs.get("b_fit", float("nan")), "{:.0f}")
+        for k, name in (("tpot_b1_awq-int4", "AWQone"), ("tpot_b1_fp8", "FPone"), ("tpot_b1_nf4", "NFone"),
+                        ("tpot_b1_int8", "INTone"), ("thr_bfit_awq-int4", "AWQthr"), ("thr_bfit_fp8", "FPthr"),
+                        ("wsave_awq-int4", "AWQsave"), ("wsave_nf4", "NFsave")):
+            putx(f"Fam{tag}{name}", fs.get(k, float("nan")), 2)
+        for bench, bt in (("gsm8k", "G"), ("mmlu", "M")):
+            for p_, pn in (("awq-int4", "AWQ"), ("fp8", "FP"), ("nf4", "NF"), ("int8", "INT")):
+                d = fs.get(f"d_{bench}_{p_}", float("nan"))
+                put(f"Fam{tag}{bt}{pn}", sg(d) if ok(d) else "n/a")
+    try:
+        from transformers import AutoConfig
+        from quantbench import configs as C
+        cq, cr = AutoConfig.from_pretrained(C.BASE["7b"]), AutoConfig.from_pretrained(C.BASE["q3-8b"])
+        putx("FamKVratio", M.kv_bytes_per_token(cr) / M.kv_bytes_per_token(cq), 1)
+        put("FamQLayers", cq.num_hidden_layers, "{:d}")
+        put("FamRLayers", cr.num_hidden_layers, "{:d}")
+        put("FamQKVheads", cq.num_key_value_heads, "{:d}")
+        put("FamRKVheads", cr.num_key_value_heads, "{:d}")
+    except Exception as e:  # offline: leave the architecture numbers out
+        print("  config lookup failed:", e)
+    r = A.mmlu()
+    if not r.empty:
+        r = r.set_index(["backend", "size", "precision"]).accuracy * 100
+        put("FamRMMLUbf", float(r.get(("hf", "q3-8b", "bf16"), float("nan"))), "{:.1f}")
+    put("FamRGSMbf", g("hf", "q3-8b", "bf16"), "{:.1f}")
+
+    fq, fr = pair.get("7b") or {}, pair.get("q3-8b") or {}
+    keys = [("fp8", "FP8"), ("int8", "LLM.int8()"), ("awq-int4", "AWQ-INT4"), ("nf4", "NF4")]
+    have = [(k, n) for k, n in keys if ok(fr.get(f"d_mmlu_{k}", float("nan")))]
+    if have:
+        def lst(fs, bench):
+            return ", ".join(f"{sg(fs[f'd_{bench}_{k}'])} ({n})" for k, n in have if ok(fs.get(f"d_{bench}_{k}", float("nan"))))
+        gmax = max(abs(fr[f"d_gsm8k_{k}"]) for k, _ in have if ok(fr.get(f"d_gsm8k_{k}", float("nan"))))
+        nsig = sum(fr.get(f"p_mmlu_{k}", 1) < 0.05 / len(have) for k, _ in have)
+        put("FamQualitySentence", f"Quality costs are of the same order: relative to BF16, Qwen3-8B's MMLU accuracy "
+            f"changes by {lst(fr, 'mmlu')} points ({nsig} of {len(have)} significant after correction), against "
+            f"{lst(fq, 'mmlu')} for Qwen2.5-7B, and no GSM8K change exceeds {gmax:.1f} points.")
+    else:
+        put("FamQualitySentence", "")
 
     def tex_safe(v):
         return re.sub(r"(?<!\\)%", r"\\%", str(v))   # a bare % would comment out the closing brace

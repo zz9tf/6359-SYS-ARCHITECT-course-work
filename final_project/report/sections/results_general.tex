@@ -1,0 +1,17 @@
+To check that the conclusions are not specific to Qwen2.5, we repeated the core measurements on
+Qwen3-8B~\cite{qwen3}, a newer model with a different layout (\FamRLayers{} layers and \FamRKVheads{}
+KV heads against \FamQLayers{} and \FamQKVheads{} for Qwen2.5-7B), run in non-thinking mode.
+\Cref{tab:general} compares the two on the same grid.
+
+The systems results carry over almost unchanged. 4-bit weights shrink by \FamRAWQsave{} rather than
+$4\times$; at batch size one AWQ-INT4 decodes \FamRAWQone{} faster (\FamQAWQone{} for Qwen2.5-7B),
+FP8 \FamRFPone{} faster, and LLM.int8() runs at \FamRINTone{} of the BF16 speed. At $B=\FamRBcmp$
+FP8 still raises throughput by \FamRFPthr{} while AWQ-INT4 has fallen to \FamRAWQthr. The one
+difference confirms the host-overhead explanation of \cref{sec:mechanism}: NF4, \FamQNFone{} faster
+than BF16 on the 28-layer Qwen2.5-7B, is \FamRNFone{} on the 36-layer Qwen3-8B, just as it was
+slower on the 36-layer Qwen2.5-3B. More layers mean more kernel launches per decode step, and the
+step becomes bound by the host rather than by memory. Qwen3-8B also stores \FamKVratio{} as many
+KV-cache bytes per token, so at $B=256$ none of its configurations fits the cache; the memory a
+format saves on weights matters even more for such models. \FamQualitySentence
+
+\input{tables/t_generalization}

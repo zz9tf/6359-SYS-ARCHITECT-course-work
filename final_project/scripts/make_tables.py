@@ -9,6 +9,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from quantbench import analysis as A  # noqa: E402
+from quantbench import configs  # noqa: E402
 from quantbench import memory as M  # noqa: E402
 from quantbench.results import RESULTS, ROOT  # noqa: E402
 
@@ -149,34 +150,42 @@ def table_crossover(size="7b"):
 
 def table_quality():
     ppl, gsm = A.quality()
+    mm = A.mmlu()
+    names = {"3b": "Qwen2.5-3B", "7b": "Qwen2.5-7B", "14b": "Qwen2.5-14B", "q3-8b": "Qwen3-8B"}
+
+    def pick(df, b, size, p, col, scale=1.0):
+        if df.empty:
+            return np.nan
+        r = df[(df.backend == b) & (df["size"] == size) & (df.precision == p)]
+        return r[col].iloc[0] * scale if len(r) else np.nan
+
     rows = []
-    for size in ("3b", "7b", "14b"):
-        base_ppl = base_acc = None
+    for size in ("3b", "7b", "14b", "q3-8b"):
         first = True
+        base_ppl, base_g, base_m = (pick(ppl, "hf", size, "bf16", "ppl"), pick(gsm, "hf", size, "bf16", "accuracy", 100),
+                                    pick(mm, "hf", size, "bf16", "accuracy", 100))
+        same = ppl[(ppl["size"] == size)].ppl if not ppl.empty else pd.Series(dtype=float)
         for b, p in ORDER:
-            q = ppl[(ppl.backend == b) & (ppl["size"] == size) & (ppl.precision == p)] if not ppl.empty else ppl
-            g = gsm[(gsm.backend == b) & (gsm["size"] == size) & (gsm.precision == p)] if not gsm.empty else gsm
-            if q.empty and g.empty:
+            pv, gv, mv = pick(ppl, b, size, p, "ppl"), pick(gsm, b, size, p, "accuracy", 100), pick(mm, b, size, p, "accuracy", 100)
+            if np.isnan(pv) and np.isnan(gv) and np.isnan(mv):
                 continue
-            pv = q.ppl.iloc[0] if len(q) else np.nan
-            av = g.accuracy.iloc[0] * 100 if len(g) else np.nan
             ref = b == "hf" and p == "bf16"
-            if ref:
-                base_ppl, base_acc = pv, av
-            test = None if ref else A.gsm8k_paired(("hf", size, "bf16"), (b, size, p))
-            same = ppl[(ppl["size"] == size)].ppl if not ppl.empty else pd.Series(dtype=float)
+            tg = None if ref else A.paired("gsm8k", ("hf", size, "bf16"), (b, size, p))
+            tm = None if ref else A.paired("mmlu", ("hf", size, "bf16"), (b, size, p))
             outlier = len(same) > 2 and pv > 3 * same.median()
-            rows.append({"Model": size.upper() if first else "", "Config": SHORT[(b, p)],
+            rows.append({"Model": names[size] if first else "", "Config": SHORT[(b, p)],
                          "PPL": fmt(pv, 2) + ("$^{\\ddagger}$" if outlier else ""),
-                         "$\\Delta$PPL": signed(pv - base_ppl, 2) if not ref and base_ppl is not None else "--",
-                         "GSM8K (%)": fmt(av, 1),
-                         "$\\Delta$acc": signed(av - base_acc, 1) if not ref and base_acc is not None else "--",
-                         "$p$": fmt_p(test["p_value"]) if test else "--"})
+                         "$\\Delta$PPL": "--" if ref else signed(pv - base_ppl, 2),
+                         "GSM8K": fmt(gv, 1), "$\\Delta$": "--" if ref else signed(gv - base_g, 1),
+                         "$p$": fmt_p(tg["p_value"]) if tg else "--",
+                         "MMLU": fmt(mv, 1), "$\\Delta$\\,": "--" if ref else signed(mv - base_m, 1),
+                         "$p$\\,": fmt_p(tm["p_value"]) if tm else "--"})
             first = False
     write(pd.DataFrame(rows), "t_quality",
-          "Q4 --- quality. WikiText-2 perplexity (2048-token windows) and GSM8K accuracy (1,319 questions, zero-shot "
-          "CoT, greedy decoding). Deltas are against HF BF16 of the same model; $p$ is the two-sided exact McNemar "
-          "test of the paired GSM8K answers against HF BF16.", "tab:quality", colfmt="llrrrrr",
+          "Q4 --- quality. WikiText-2 perplexity (2048-token windows), GSM8K accuracy (\\%, 1,319 questions, zero-shot "
+          "CoT, greedy) and MMLU accuracy (\\%, 14,042 questions, zero-shot). Deltas are against HF BF16 of the same "
+          "model; $p$ is the two-sided exact McNemar test of the paired answers against HF BF16.", "tab:quality",
+          colfmt="llrrrrrrrr", wide=True,
           note="$^{\\ddagger}$Degraded on raw text but not on chat-formatted text; see \\cref{sec:q4}.")
 
 
@@ -205,8 +214,38 @@ def table_serving(size="7b"):
               "requests/s and output tokens/s; TTFT and TPOT in ms.", "tab:serving", colfmt="lrrrrr")
 
 
+def table_generalization(a="7b", b="q3-8b"):
+    sa, sb = A.family_pair(a, b)
+    if not sb:
+        return
+    bc = sb["b_cmp"]
+
+    def x(v):
+        return "--" if v is None or np.isnan(v) else ("all $B$" if np.isinf(v) else f"{v:.2f}$\\times$")
+
+    def dp(d, p_):
+        return "--" if np.isnan(d) else f"{signed(d, 1)} ({fmt_p(p_)})"
+
+    spec = [("Weight saving, AWQ-INT4 (vLLM)", "wsave_awq-int4", x), ("Weight saving, NF4 (HF)", "wsave_nf4", x),
+            ("Decode speedup $B=1$, AWQ-INT4", "tpot_b1_awq-int4", x), ("Decode speedup $B=1$, FP8", "tpot_b1_fp8", x),
+            ("Decode speedup $B=1$, NF4", "tpot_b1_nf4", x), ("Decode speedup $B=1$, LLM.int8()", "tpot_b1_int8", x),
+            (f"Throughput $B={bc}$, AWQ-INT4", "thr_bfit_awq-int4", x), (f"Throughput $B={bc}$, FP8", "thr_bfit_fp8", x)]
+    rows = [{"Metric (vs.\\ BF16)": n, configs.MODEL_LABEL[a]: f(sa.get(k, np.nan)), configs.MODEL_LABEL[b]: f(sb.get(k, np.nan))}
+            for n, k, f in spec]
+    for bench, label in (("gsm8k", "GSM8K"), ("mmlu", "MMLU")):
+        for p, pl in (("fp8", "FP8"), ("int8", "LLM.int8()"), ("awq-int4", "AWQ-INT4"), ("nf4", "NF4")):
+            rows.append({"Metric (vs.\\ BF16)": f"{label} $\\Delta$ pp ($p$), {pl}",
+                         configs.MODEL_LABEL[a]: dp(sa.get(f"d_{bench}_{p}", np.nan), sa.get(f"p_{bench}_{p}", np.nan)),
+                         configs.MODEL_LABEL[b]: dp(sb.get(f"d_{bench}_{p}", np.nan), sb.get(f"p_{bench}_{p}", np.nan))})
+    write(pd.DataFrame(rows), "t_generalization",
+          f"Generalization --- the headline results for {configs.MODEL_LABEL[a]} and {configs.MODEL_LABEL[b]} "
+          "(non-thinking mode) on the same grid ($L=512$, 128 output tokens). Throughput is compared at the largest batch "
+          f"at which both models' KV caches hold every request ($B={bc}$). Qwen3-8B has no official GPTQ checkpoint.",
+          "tab:general", colfmt="lrr")
+
+
 def main():
-    for f in (table_weights, table_speed, table_crossover, table_quality, table_serving):
+    for f in (table_weights, table_speed, table_crossover, table_quality, table_serving, table_generalization):
         try:
             f()
         except Exception as e:  # keep going so partial results still produce tables

@@ -25,12 +25,18 @@ and answers four questions:
 \noindent\textbf{Contributions.}
 (1) A reproducible measurement harness (\texttt{quantbench}) that records memory, latency,
 throughput, energy and quality for eight configurations on two backends (Hugging Face
-Transformers with bitsandbytes, and vLLM with Marlin/CUTLASS kernels) and three model sizes,
+Transformers with bitsandbytes, and vLLM with Marlin/CUTLASS kernels), three model sizes and a
+second model family (Qwen3-8B),
 about \NumMeasurements{} timed runs in total.
-(2) Evidence that the kernel matters more than the bit-width: at batch size 1 the same 4-bit weights
-are \NFslowdown{} slower than BF16 under bitsandbytes NF4 but \AWQspeedup{} faster under Marlin.
+(2) Evidence that the kernel matters more than the bit-width: at batch size 1 the 7B model's 8-bit
+weights decode \GPTQeightspeedup{} faster than BF16 under vLLM's Marlin kernel but
+\INTeightslowdown{} slower under bitsandbytes LLM.int8(), and its 4-bit weights \AWQspeedup{} faster
+under Marlin but only \NFsevenB{} faster under bitsandbytes NF4.
 (3) A kernel-level explanation of the crossover from microbenchmarks, a measured roofline and
 per-step profiles, which locates the batch size where each format stops paying off.
-(4) Memory and quality results showing that the nominal ratio overstates the real saving, and
-that a quantized larger model beats a full-precision smaller one at the same memory budget.
+(4) Memory and quality results on three benchmarks with paired significance tests, showing that the
+nominal ratio overstates the real saving, that 8-bit formats with good kernels preserve quality
+while 4-bit formats cost more the smaller the model, and that a quantized larger model still beats
+a full-precision smaller one at less memory. We also show that a single quality metric can miss
+quantization damage.
 We end with a decision guide (\cref{sec:discussion}). Code, raw measurements and figures are public.

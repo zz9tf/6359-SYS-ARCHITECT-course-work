@@ -1,9 +1,26 @@
 """Result slides. Every number on them is computed from results/ at build time."""
+import re
+from pathlib import Path
+
 import numpy as np
 
 import uta as U
 from layouts import figure_with_tiles_below, figure_with_tiles_right
 from quantbench import analysis as A
+
+
+def macros():
+    """The report's generated numbers (report/numbers.tex) as plain text, so slides and report agree."""
+    f = Path(__file__).resolve().parents[1] / "report" / "numbers.tex"
+    out = {}
+    if f.exists():
+        for name, val in re.findall(r"\\newcommand\{\\(\w+)\}\{(.*)\}", f.read_text()):
+            val = (val.replace("$\\times$", "\u00d7").replace("{,}", ",").replace("\\,", " ").replace("--", "\u2013")
+                   .replace("\\%", "%").replace("$<$", "<"))
+            val = re.sub(r"\$([^$]*)\$", r"\1", val).replace("vs.\\ ", "vs. ").replace("<", " < ").replace("  ", " ")
+            val = re.sub(r"(?<![\w.])-(?=\d)", "\u2212", val)   # numeric minus signs only
+            out[name] = val.strip()
+    return out
 
 
 def _x(v, nd=1):
@@ -62,7 +79,8 @@ def slide_q2(prs, fig_dir, f):
               & (agg.tag == "grid")].set_index("precision").out_tok_s
     fp_ratio = thr.get("fp8", np.nan) / thr.get("bf16", np.nan)
     s = U.content_slide(prs, "Q2 \u2014 Speed Depends on the Kernel",
-                        "Qwen2.5-7B: same 4-bit weights, opposite outcomes on two software stacks",
+                        f"Qwen2.5-7B at batch 1: low-bit decode ranges from {_x(awq, 1)} faster to {_x(1 / int8, 1)} "
+                        "slower \u2014 the kernel decides",
                         notes=("Left: prefill is compute-bound, so only formats that quantize activations (FP8) cut TTFT. "
                                "Middle: decode at small batch is memory-bound; vLLM's fused kernels turn fewer bytes into "
                                "speed, bitsandbytes does not. Right: at high batch only FP8 still raises throughput."))
@@ -191,11 +209,22 @@ def slide_quality(prs, fig_dir, f):
     ppl, gsm = A.quality()
     if not fig.exists() or gsm.empty:
         return
+    m = macros()
     qf = quality_facts()
+    tiles = qf["tiles"]
+    if "MFourMin" in m and "EightKernMax" in m:
+        d_g = qf["a14"] - qf["a7"]
+        d_m = float(m.get("MMLUAWQFourteen", "nan")) - float(m.get("MMLUBFSeven", "nan"))
+        tiles = [(f"\u2264 {m['EightKernMax']} pp", "GPTQ-INT8 / FP8 vs BF16, GSM8K + MMLU",
+                  f"all sizes; only LLM.int8() on 3B loses ({m.get('IntMMLUThree', '?')} MMLU pp)"),
+                 (f"{m['MFourMin']} to {m['MFourMax']} pp", "MMLU change with 4-bit formats",
+                  f"3B {m.get('MDFourMinThree')}\u2026{m.get('MDFourMaxThree')} \u00b7 7B {m.get('MDFourMinSeven')}\u2026"
+                  f"{m.get('MDFourMaxSeven')} \u00b7 14B {m.get('MDFourMinFourteen')}\u2026{m.get('MDFourMaxFourteen')}"),
+                 (f"+{d_g:.1f} / +{d_m:.1f} pp", "14B AWQ-INT4 vs 7B BF16 (GSM8K / MMLU)", qf["tiles"][2][2])]
     s = U.content_slide(prs, "Q4 \u2014 Quality: What Do We Lose?",
-                        "GSM8K accuracy (1,319 questions) and WikiText-2 perplexity vs. weight memory",
+                        "GSM8K (1,319 q.) \u00b7 MMLU (14,042 q.) \u00b7 WikiText-2 perplexity, with paired McNemar tests",
                         notes=qf.get("notes", ""))
-    figure_with_tiles_right(s, fig, qf["tiles"], alt="GSM8K accuracy and perplexity versus weight memory", fig_w=6.2)
+    figure_with_tiles_below(s, fig, tiles, alt="GSM8K, MMLU and perplexity versus weight memory")
 
 
 def quality_facts():
@@ -263,6 +292,26 @@ def quality_facts():
     return {"tiles": tiles, "d8": d8, "d4": d4, "a14": a14, "a7": a7}
 
 
+def slide_general(prs, fig_dir):
+    fig = fig_dir / "general_qwen3.png"
+    m = macros()
+    if not fig.exists() or "FamRAWQone" not in m:
+        return
+    s = U.content_slide(prs, "Does It Generalize? Qwen3-8B",
+                        f"Same measurements on a newer model ({m.get('FamRLayers')} layers, {m.get('FamRKVheads')} KV heads; "
+                        "non-thinking mode) \u2014 the systems picture carries over",
+                        notes=("Qwen3-8B reproduces the decode speedups of AWQ and FP8 and the LLM.int8() slowdown within a few "
+                               "percent. NF4 turns from a small gain into a loss because the 36-layer model is host-bound at "
+                               "batch 1, exactly like the 36-layer Qwen2.5-3B."))
+    tiles = [(f"{m['FamRAWQone']} vs {m['FamQAWQone']}", "AWQ-INT4 decode speedup at B=1",
+              f"Qwen3-8B vs Qwen2.5-7B; FP8 {m.get('FamRFPone')} vs {m.get('FamQFPone')}"),
+             (m.get("FamRNFone", "n/a"), "NF4 at B=1 on Qwen3-8B",
+              f"{m.get('FamRLayers')} layers \u2192 host-bound, as on Qwen2.5-3B"),
+             (f"{m.get('FamKVratio')}", "KV-cache bytes per token vs Qwen2.5-7B",
+              "B=256 overflows the cache in every format")]
+    figure_with_tiles_below(s, fig, tiles, alt="Decode speedup and MMLU change for Qwen2.5-7B and Qwen3-8B")
+
+
 def slide_takeaways(prs, f):
     sv = f["sv"]
     agg = f["agg"]
@@ -270,8 +319,11 @@ def slide_takeaways(prs, f):
               & (agg.tag == "grid")].set_index("precision").out_tok_s
     s = U.content_slide(prs, "Takeaways: When Does Quantization Pay Off?",
                         "Bit-width alone predicts little \u2014 the kernel and the regime decide",
-                        notes=("Four rules: plan memory with the real ratio; for interactive serving use 4-bit weights with a "
-                               "fused kernel; for throughput use FP8 W8A8; treat bitsandbytes as a memory tool, not a speed-up."))
+                        notes=("Six rules: plan memory with the real ratio; for interactive serving use 4-bit weights with a "
+                               "fused kernel; for throughput use FP8 W8A8; treat bitsandbytes as a memory tool, not a speed-up; "
+                               "8-bit formats with good kernels preserve quality while 4-bit costs one to three MMLU points; "
+                               "and at a fixed memory budget a larger 4-bit model beats a smaller 16-bit one."))
+    m = macros()
     cards = [("LuMemoryStick", "Plan memory with the real ratio", f"{f['w_ratio_nf4']:.1f}\u00d7",
               "4-bit weight saving on Qwen2.5-7B, not 4\u00d7; KV cache and activations stay 16-bit"),
              ("LuZap", "Few users: 4-bit + fused kernel", f"{sv('vllm', 'awq-int4'):.1f}\u00d7",
@@ -279,16 +331,20 @@ def slide_takeaways(prs, f):
              ("LuTrendingUp", "High throughput: FP8 W8A8", f"{thr.get('fp8', np.nan) / thr.get('bf16', np.nan):.1f}\u00d7",
               "the BF16 throughput at batch 256, where 4-bit weight-only gains have vanished"),
              ("LuTriangleAlert", "bitsandbytes: memory, not speed", f"{1 / sv('hf', 'int8'):.1f}\u00d7",
-              "slower decode with LLM.int8() at batch size 1; NF4 wins only tiny batches of large models")]
-    w, h = 4.42, 1.55
+              "slower decode with LLM.int8() at batch size 1; NF4 helps only tiny batches"),
+             ("LuScale", "Quality: 8-bit free, 4-bit not", f"{m.get('MFourMin', '?')} pp",
+              f"worst MMLU pp with 4-bit (3B); GPTQ-INT8 / FP8 within {m.get('EightKernMax', '?')} pp everywhere"),
+             ("LuLayers", "Spend memory on parameters", f"{m.get('MMLUAWQFourteen', '?')}%",
+              f"MMLU of 14B AWQ-INT4 vs {m.get('MMLUBFSeven', '?')}% for 7B BF16, with less weight memory")]
+    w, h = 2.93, 1.55
     for i, (ic, head, big, body) in enumerate(cards):
-        x = 0.5 + (i % 2) * (w + 0.16)
-        y = U.TOP + (i // 2) * (h + 0.16)
+        x = 0.5 + (i % 3) * (w + 0.13)
+        y = U.TOP + (i // 3) * (h + 0.14)
         U.box(s, x, y, w, h, fill=U.LIGHT, radius=0.08)
-        U.icon(s, x + 0.36, y + 0.38, 0.44, ic)
-        U.text(s, x + 0.72, y + 0.14, w - 0.86, 0.48, [head], size=12, bold=True, color=U.NAVY, anchor="m")
-        U.text(s, x + 0.2, y + 0.72, 1.55, 0.62, [big], size=22, bold=True, color=U.BLUE_TXT, anchor="m")
-        U.text(s, x + 1.8, y + 0.7, w - 1.95, h - 0.78, [body], size=9.5, color=U.TEXT, anchor="m")
+        U.icon(s, x + 0.3, y + 0.32, 0.36, ic)
+        U.text(s, x + 0.56, y + 0.1, w - 0.64, 0.44, [head], size=10.5, bold=True, color=U.NAVY, anchor="m")
+        U.text(s, x + 0.14, y + 0.6, 1.0, 0.8, [big], size=19, bold=True, color=U.BLUE_TXT, anchor="m")
+        U.text(s, x + 1.14, y + 0.56, w - 1.24, h - 0.62, [body], size=8.5, color=U.TEXT, anchor="m")
 
 
 def add_results_slides(prs, fig_dir, facts, setup):
@@ -301,4 +357,5 @@ def add_results_slides(prs, fig_dir, facts, setup):
     slide_profile(prs, fig_dir, f)
     slide_serving(prs, fig_dir, f)
     slide_quality(prs, fig_dir, f)
+    slide_general(prs, fig_dir)
     slide_takeaways(prs, f)

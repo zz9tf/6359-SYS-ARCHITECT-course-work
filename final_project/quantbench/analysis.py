@@ -251,3 +251,60 @@ def paired(bench, a, b):
     acc_a = sum(ra[i] for i in common) / len(common)
     acc_b = sum(rb[i] for i in common) / len(common)
     return {"n": len(common), "delta_pp": (acc_b - acc_a) * 100, "a_only": n10, "b_only": n01, "p_value": p}
+
+
+def family_summary(size, L=512, batches=(1, 4, 16, 64, 256), bcmp=None):
+    """Headline metrics of one model on a common grid, used to compare model families.
+
+    Throughput is compared at ``bcmp`` (default: the largest batch at which every vLLM configuration of
+    this model fits its KV cache); pass the smaller of two models' ``b_fit`` to compare them like for like.
+    """
+    agg, _ = sweeps()
+    d = agg[(agg["size"] == size) & (agg.tag == "grid") & (agg.output_len == 128) & (agg.input_len == L)
+            & agg.batch.isin(batches)]
+    out = {}
+    if d.empty:
+        return out
+    sp = with_speedup(d)
+
+    def at(backend, prec, B, col):
+        r = sp[(sp.backend == backend) & (sp.precision == prec) & (sp.batch == B)]
+        return float(r[col].iloc[0]) if len(r) else float("nan")
+
+    for b, p in (("vllm", "awq-int4"), ("vllm", "fp8"), ("hf", "nf4"), ("hf", "int8")):
+        out[f"tpot_b1_{p}"] = at(b, p, 1, "speedup_tpot")
+    # largest batch at which every vLLM configuration of this model still fits its KV cache
+    fit = d[(d.backend == "vllm")].groupby("batch").fits_kv.all()
+    out["b_fit"] = int(fit[fit].index.max()) if fit.any() else max(batches)
+    bfit = bcmp or out["b_fit"]
+    out["b_cmp"] = bfit
+    for p in ("awq-int4", "fp8"):
+        out[f"thr_bfit_{p}"] = at("vllm", p, bfit, "out_tok_s") / at("vllm", "bf16", bfit, "out_tok_s")
+        out[f"e2e_bfit_{p}"] = at("vllm", p, bfit, "speedup_e2e")
+    hf, vl = loads()
+
+    def ratio(df, col, p, scale=1.0):
+        if df.empty:
+            return float("nan")
+        r = df[df["size"] == size].set_index("precision")[col]
+        return float(r.get("bf16", np.nan) / r.get(p, np.nan))
+
+    out["wsave_awq-int4"] = ratio(vl, "load_gib", "awq-int4")
+    out["wsave_nf4"] = ratio(hf, "weights_bytes", "nf4")
+    _, gsm = quality()
+    mm = mmlu()
+    for bench, df in (("gsm8k", gsm), ("mmlu", mm)):
+        for b, p in (("vllm", "awq-int4"), ("vllm", "fp8"), ("hf", "nf4"), ("hf", "int8")):
+            t = paired(bench, ("hf", size, "bf16"), (b, size, p))
+            out[f"d_{bench}_{p}"] = t["delta_pp"] if t else float("nan")
+            out[f"p_{bench}_{p}"] = t["p_value"] if t else float("nan")
+    return out
+
+
+def family_pair(a, b):
+    """family_summary of two models, with throughput compared at the largest batch both fit."""
+    sa, sb = family_summary(a), family_summary(b)
+    if not sa or not sb:
+        return sa, sb
+    bc = min(sa["b_fit"], sb["b_fit"])
+    return family_summary(a, bcmp=bc), family_summary(b, bcmp=bc)

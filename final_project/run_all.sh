@@ -61,6 +61,17 @@ for p in nf4 int8; do
   python scripts/eval_ppl.py --backend hf --size 14b --precision $p
   python scripts/eval_gsm8k.py --backend hf --size 14b --precision $p --batch 32
 done
+# MMLU (all 14,042 questions)
+for size in 3b 7b 14b; do for p in bf16 fp8 gptq-int8 awq-int4 gptq-int4; do
+  [ "$size" = 14b ] && [ "$p" = bf16 ] && continue      # 14B BF16 does not fit vLLM's cache; HF runs it below
+  python scripts/eval_mmlu.py --backend vllm --size $size --precision $p
+done; done
+for size in 3b 7b; do
+  python scripts/eval_mmlu.py --backend hf --size $size --precision bf16 --batch 16
+  python scripts/eval_mmlu.py --backend hf --size $size --precision nf4 --batch 16
+  python scripts/eval_mmlu.py --backend hf --size $size --precision int8 --batch 8
+done
+python scripts/eval_mmlu.py --backend hf --size 14b --precision bf16 --batch 8
 # Diagnosing the 14B GPTQ-INT4 perplexity outlier: activation dtype, and next-token ranking on raw vs chat text
 python scripts/eval_ppl.py --backend vllm --size 14b --precision gptq-int4 --dtype bfloat16 --out results/quality_ppl_diag.jsonl
 for s in 14b 7b; do for p in gptq-int4 awq-int4 gptq-int8 fp8; do
@@ -68,6 +79,21 @@ for s in 14b 7b; do for p in gptq-int4 awq-int4 gptq-int8 fp8; do
   python scripts/diag_ppl_topk.py --size $s --precision $p --corpus gsm8k-chat --windows 400
 done; done
 
-# 5. Figures and tables
+# 5. Second model family: Qwen3-8B (non-thinking mode; no official GPTQ checkpoint)
+for p in bf16 fp8 awq-int4; do
+  python scripts/vllm_sweep.py --size q3-8b --precision $p --batch-sizes 1,4,16,64,256 --input-lens 512,2048
+  python scripts/eval_ppl.py --backend vllm --size q3-8b --precision $p
+  python scripts/eval_gsm8k.py --backend vllm --size q3-8b --precision $p
+  python scripts/eval_mmlu.py --backend vllm --size q3-8b --precision $p
+done
+for p in bf16 nf4 int8; do
+  python scripts/hf_sweep.py --size q3-8b --precision $p --batch-sizes 1,4,16 --input-lens 512
+  python scripts/hf_sweep.py --size q3-8b --precision $p --batch-sizes 1,4 --input-lens 2048
+  python scripts/eval_ppl.py --backend hf --size q3-8b --precision $p
+  python scripts/eval_gsm8k.py --backend hf --size q3-8b --precision $p --batch $([ $p = int8 ] && echo 16 || echo 32)
+  python scripts/eval_mmlu.py --backend hf --size q3-8b --precision $p --batch $([ $p = int8 ] && echo 8 || echo 16)
+done
+
+# 6. Figures and tables
 python scripts/make_figures.py
 python scripts/make_tables.py

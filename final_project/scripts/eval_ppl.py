@@ -41,8 +41,12 @@ def nll_hf(model_id, precision, windows):
     per_token = []
     for w in windows:
         x = torch.tensor([w], device="cuda")
-        logits = model(input_ids=x).logits[0, :-1].float()
-        per_token.append(torch.nn.functional.cross_entropy(logits, x[0, 1:], reduction="none").cpu().tolist())
+        h = model.model(input_ids=x).last_hidden_state[0, :-1]
+        nll = []
+        for c in range(0, h.shape[0], 256):   # LM head in chunks: full 2048 x 152K logits do not fit next to 14B BF16
+            logits = model.lm_head(h[c:c + 256]).float()
+            nll.append(torch.nn.functional.cross_entropy(logits, x[0, 1 + c:1 + c + 256], reduction="none"))
+        per_token.append(torch.cat(nll).cpu().tolist())
     return per_token
 
 

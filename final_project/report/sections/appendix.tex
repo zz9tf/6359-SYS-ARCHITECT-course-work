@@ -22,6 +22,14 @@ memory floor), so fewer bytes cannot help, NF4 never beats BF16, and LLM.int8() 
 \label{fig:heatmaps3b}
 \end{figure*}
 
+\section{Detailed results}
+\label{app:tables}
+\Cref{tab:weights,tab:speed} list the weight memory of every configuration and the latency,
+throughput and energy of the 7B model behind \cref{fig:weights,fig:latency}.
+
+\input{tables/t_weight_memory}
+\input{tables/t_speed}
+
 \section{Reproducibility}
 \label{app:repro}
 Every number in this report is generated from the raw measurements by

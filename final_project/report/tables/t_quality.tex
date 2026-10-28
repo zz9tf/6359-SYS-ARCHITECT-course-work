@@ -1,34 +1,42 @@
-\begin{table}[t]
+\begin{table*}[t]
 \centering
 \footnotesize
-\caption{Q4 --- quality. WikiText-2 perplexity (2048-token windows) and GSM8K accuracy (1,319 questions, zero-shot CoT, greedy decoding). Deltas are against HF BF16 of the same model; $p$ is the two-sided exact McNemar test of the paired GSM8K answers against HF BF16.}
+\caption{Q4 --- quality. WikiText-2 perplexity (2048-token windows), GSM8K accuracy (\%, 1,319 questions, zero-shot CoT, greedy) and MMLU accuracy (\%, 14,042 questions, zero-shot). Deltas are against HF BF16 of the same model; $p$ is the two-sided exact McNemar test of the paired answers against HF BF16.}
 \label{tab:quality}
-\setlength{\tabcolsep}{3.2pt}
-\begin{tabular}{llrrrrr}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llrrrrrrrr}
 \toprule
-Model & Config & PPL & $\Delta$PPL & GSM8K (\%) & $\Delta$acc & $p$ \\
+Model & Config & PPL & $\Delta$PPL & GSM8K & $\Delta$ & $p$ & MMLU & $\Delta$\, & $p$\, \\
 \midrule
-3B & HF BF16 & 8.56 & -- & 85.8 & -- & -- \\
- & HF INT8 & 8.66 & $+0.10$ & 85.5 & $-0.3$ & 0.777 \\
- & HF NF4 & 9.11 & $+0.55$ & 82.6 & $-3.3$ & $<$0.001 \\
- & vLLM BF16 & 8.56 & $+0.00$ & 86.0 & $+0.2$ & 0.871 \\
- & vLLM FP8 & 8.64 & $+0.09$ & 85.4 & $-0.5$ & 0.610 \\
- & vLLM GPTQ-8 & 8.56 & $+0.00$ & 86.4 & $+0.6$ & 0.322 \\
- & vLLM AWQ-4 & 9.10 & $+0.54$ & 82.7 & $-3.1$ & 0.002 \\
- & vLLM GPTQ-4 & 9.22 & $+0.66$ & 82.0 & $-3.8$ & $<$0.001 \\
-7B & HF BF16 & 7.46 & -- & 90.8 & -- & -- \\
- & HF INT8 & 7.49 & $+0.03$ & -- & -- & -- \\
- & HF NF4 & 7.77 & $+0.31$ & 90.3 & $-0.5$ & 0.500 \\
- & vLLM BF16 & 7.46 & $+0.00$ & 91.2 & $+0.4$ & 0.359 \\
- & vLLM FP8 & 7.51 & $+0.05$ & 90.8 & $+0.0$ & 1.000 \\
- & vLLM GPTQ-8 & 7.46 & $+0.00$ & 91.7 & $+0.9$ & 0.043 \\
- & vLLM AWQ-4 & 7.85 & $+0.39$ & 90.4 & $-0.5$ & 0.576 \\
- & vLLM GPTQ-4 & 7.78 & $+0.32$ & 91.1 & $+0.2$ & 0.828 \\
-14B & vLLM FP8 & 5.77 & -- & 94.4 & -- & -- \\
- & vLLM GPTQ-8 & 5.71 & -- & 94.7 & -- & -- \\
- & vLLM AWQ-4 & 6.16 & -- & 93.9 & -- & -- \\
- & vLLM GPTQ-4 & 37.46$^{\ddagger}$ & -- & 93.7 & -- & -- \\
+Qwen2.5-3B & HF BF16 & 8.56 & -- & 85.8 & -- & -- & 63.5 & -- & -- \\
+ & HF INT8 & 8.66 & $+0.10$ & 85.5 & $-0.3$ & 0.777 & 62.4 & $-1.1$ & $<$0.001 \\
+ & HF NF4 & 9.11 & $+0.55$ & 82.6 & $-3.3$ & $<$0.001 & 60.8 & $-2.8$ & $<$0.001 \\
+ & vLLM BF16 & 8.56 & $+0.00$ & 86.0 & $+0.2$ & 0.871 & 63.7 & $+0.1$ & 0.075 \\
+ & vLLM FP8 & 8.64 & $+0.09$ & 85.4 & $-0.5$ & 0.610 & 63.2 & $-0.4$ & 0.038 \\
+ & vLLM GPTQ-8 & 8.56 & $+0.00$ & 86.4 & $+0.6$ & 0.322 & 63.6 & $+0.1$ & 0.261 \\
+ & vLLM AWQ-4 & 9.10 & $+0.54$ & 82.7 & $-3.1$ & 0.002 & 61.4 & $-2.2$ & $<$0.001 \\
+ & vLLM GPTQ-4 & 9.22 & $+0.66$ & 82.0 & $-3.8$ & $<$0.001 & 61.1 & $-2.5$ & $<$0.001 \\
+Qwen2.5-7B & HF BF16 & 7.46 & -- & 90.8 & -- & -- & 71.4 & -- & -- \\
+ & HF INT8 & 7.49 & $+0.03$ & 90.6 & $-0.2$ & 0.771 & 71.2 & $-0.2$ & 0.134 \\
+ & HF NF4 & 7.77 & $+0.31$ & 90.3 & $-0.5$ & 0.500 & 70.8 & $-0.6$ & 0.002 \\
+ & vLLM BF16 & 7.46 & $+0.00$ & 91.2 & $+0.4$ & 0.359 & 71.4 & $-0.0$ & 0.704 \\
+ & vLLM FP8 & 7.51 & $+0.05$ & 90.8 & $+0.0$ & 1.000 & 71.3 & $-0.1$ & 0.327 \\
+ & vLLM GPTQ-8 & 7.46 & $+0.00$ & 91.7 & $+0.9$ & 0.043 & 71.5 & $+0.0$ & 0.610 \\
+ & vLLM AWQ-4 & 7.85 & $+0.39$ & 90.4 & $-0.5$ & 0.576 & 69.9 & $-1.6$ & $<$0.001 \\
+ & vLLM GPTQ-4 & 7.78 & $+0.32$ & 91.1 & $+0.2$ & 0.828 & 70.0 & $-1.4$ & $<$0.001 \\
+Qwen2.5-14B & HF BF16 & 5.70 & -- & 93.9 & -- & -- & 77.0 & -- & -- \\
+ & HF INT8 & 5.78 & $+0.08$ & -- & -- & -- & -- & -- & -- \\
+ & vLLM FP8 & 5.77 & $+0.07$ & 94.4 & $+0.5$ & 0.371 & 76.9 & $-0.0$ & 0.862 \\
+ & vLLM GPTQ-8 & 5.71 & $+0.01$ & 94.7 & $+0.8$ & 0.013 & 76.9 & $-0.1$ & 0.416 \\
+ & vLLM AWQ-4 & 6.16 & $+0.46$ & 93.9 & $+0.1$ & 1.000 & 75.1 & $-1.9$ & $<$0.001 \\
+ & vLLM GPTQ-4 & 37.46$^{\ddagger}$ & $+31.77$ & 93.7 & $-0.2$ & 0.899 & 76.4 & $-0.6$ & 0.005 \\
+Qwen3-8B & HF BF16 & 9.73 & -- & 91.4 & -- & -- & 69.6 & -- & -- \\
+ & HF INT8 & 9.72 & $-0.00$ & -- & -- & -- & -- & -- & -- \\
+ & HF NF4 & 9.98 & $+0.25$ & 91.5 & $+0.2$ & 0.909 & 69.3 & $-0.3$ & 0.156 \\
+ & vLLM BF16 & 9.72 & $-0.00$ & 92.0 & $+0.6$ & 0.215 & 69.6 & $-0.0$ & 0.610 \\
+ & vLLM FP8 & 9.73 & $+0.00$ & 91.8 & $+0.5$ & 0.488 & 68.9 & $-0.7$ & $<$0.001 \\
+ & vLLM AWQ-4 & 10.18 & $+0.46$ & 91.1 & $-0.2$ & 0.818 & 68.9 & $-0.7$ & 0.003 \\
 \bottomrule
 \end{tabular}
 \par\vspace{2pt}\parbox{\linewidth}{\scriptsize $^{\ddagger}$Degraded on raw text but not on chat-formatted text; see \cref{sec:q4}.}
-\end{table}
+\end{table*}

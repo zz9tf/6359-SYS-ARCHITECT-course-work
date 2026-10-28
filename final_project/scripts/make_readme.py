@@ -36,9 +36,10 @@ def main():
    At run time the KV cache and activations are not quantized: at 32 × 2048-token prompts the
    end-to-end saving falls to **{m['MemBigNF']}** (NF4) and **{m['MemBigInt']}** (LLM.int8(), whose activation
    workspace is {m['ActIntRatio']} that of BF16).
-2. **Speed depends on the kernel, not the bit-width.** At batch size 1, AWQ-INT4 with vLLM's Marlin
-   kernel decodes **{m['AWQspeedup']} faster** than BF16, while bitsandbytes LLM.int8() is **{m['INTeightslowdown']} slower**
-   and NF4 is {m['NFsevenB']} faster on 7B but {m['NFthreeslow']} slower on 3B (whose BF16 step is host-bound).
+2. **Speed depends on the kernel, not the bit-width.** At batch size 1 the 7B model's 8-bit weights
+   decode **{m['GPTQeightspeedup']} faster** than BF16 with vLLM's Marlin kernel but **{m['INTeightslowdown']} slower** with
+   bitsandbytes LLM.int8(); its 4-bit weights decode **{m['AWQspeedup']} faster** with Marlin (AWQ) but only
+   {m['NFsevenB']} faster with bitsandbytes NF4, which is {m['NFthreeslow']} slower on the host-bound 3B model.
 3. **Weight-only gains vanish in the compute-bound regime.** AWQ-INT4 stops winning around
    **B ≈ {m['AWQcross']}** (512-token prompts) and never shortens prefill; **FP8 W8A8 is faster in every
    cell** ({m['FPminEtoE']}–{m['FPmaxEtoE']} end to end) and delivers **{m['ThrFPratio']}** the BF16 throughput at B = 256.
@@ -47,7 +48,14 @@ def main():
    M ≈ {m['MarlinFourCross']}; LLM.int8() keeps the GPU busy only {m['BusyIntone']}% of a decode step (BF16: {m['BusyBFone']}%).
 5. **Energy follows latency.** At batch size 1, AWQ-INT4 needs {m['EnAWQone']} J per token against
    {m['EnBFone']} J for BF16; at B = 256 the GPU is power-capped and only FP8 still saves energy.
-6. **Quality.** {m.get('QualityReadme', 'See the report.')}
+6. **Quality (GSM8K, MMLU, perplexity; paired McNemar tests).** {m.get('QualityReadme', 'See the report.')}
+7. **One quality metric is not enough.** The 14B GPTQ-INT4 checkpoint keeps its GSM8K and MMLU scores
+   but has a WikiText-2 perplexity of {m.get('PPLGPTQFourFourteen', '?')} (others: {m.get('PPLOthersFourteen', '?')}): it predicts the next
+   token of raw text correctly only {m.get('TopOneGPTQWiki', '?')}% of the time ({m.get('TopOneOthersWiki', '?')}% for the other formats), but
+   {m.get('TopOneGPTQChat', '?')}% on chat-formatted text, like the others.
+8. **The results carry over to Qwen3-8B.** AWQ-INT4 decodes {m.get('FamRAWQone', '?')} faster at batch 1 (Qwen2.5-7B:
+   {m.get('FamQAWQone', '?')}), FP8 {m.get('FamRFPone', '?')}, LLM.int8() runs at {m.get('FamRINTone', '?')}; NF4 is {m.get('FamRNFone', '?')} on the
+   36-layer model, again because the decode step is host-bound.
 """
     results = f"""## Results at a glance
 
@@ -83,6 +91,14 @@ def main():
 {md_table('t_quality')}
 
 ![quality](figures/q4_quality_vs_memory.png)
+
+**Does it generalize? Qwen2.5-7B vs Qwen3-8B**
+
+{md_table('t_generalization')}
+
+**Output length — end-to-end speedup vs generated tokens**
+
+![output length](figures/q3_output_length.png)
 """
     readme = ROOT / "README.md"
     text = readme.read_text()
