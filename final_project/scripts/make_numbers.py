@@ -135,6 +135,21 @@ def main():
     putx("INTeightslowdown", 1 / cell("hf", "7b", "int8", 1, 512, "speedup_tpot"), 1)
     putx("NFslowdown", 1 / cell("hf", "3b", "nf4", 1, 512, "speedup_tpot"), 2)
     putx("NFsevenB", cell("hf", "7b", "nf4", 1, 512, "speedup_tpot"), 2)
+    putx("NFfourteenB", cell("hf", "14b", "nf4", 1, 512, "speedup_tpot"), 2)
+    # cells the 14B model can only run on HF once quantized (BF16 runs out of memory)
+    o14 = oom[(oom["size"] == "14b") & (oom.backend == "hf")] if not oom.empty else oom
+    ran = agg[(agg["size"] == "14b") & (agg.backend == "hf") & (agg.tag == "grid")]
+    gained = []
+    for _, r in o14[o14.precision == "bf16"].iterrows():
+        if len(ran[(ran.precision == "nf4") & (ran.batch == r.batch) & (ran.input_len == r.input_len)]):
+            gained.append((int(r.batch), int(r.input_len)))
+    if gained:
+        cell_w14 = hfw.loc[("14b", "bf16")].weights_bytes / 1e9 if ("14b", "bf16") in hfw.index else float("nan")
+        desc = " and ".join(f"{b} prompts of {L} tokens" for b, L in sorted(gained, key=lambda t: t[0] * t[1]))
+        put("FourteenNFcap", f"For the 14B model, whose BF16 weights alone take {cell_w14:.1f}\\,GB, NF4 does buy capacity: "
+            f"it runs {desc}, which run out of memory in BF16.")
+    else:
+        put("FourteenNFcap", "")
     putx("NFthreeslow", 1 / cell("hf", "3b", "nf4", 1, 512, "speedup_tpot"), 2)
     thr = {p: cell("vllm", "7b", p, 256, 512, "out_tok_s") for p in ("bf16", "awq-int4", "fp8")}
     put("ThrBFmax", f"{thr['bf16']:,.0f}" if ok(thr["bf16"]) else "n/a")
@@ -325,7 +340,7 @@ def main():
 
     def sg(v, nd=1, tex=True):
         """Signed number with a real minus sign."""
-        t = f"{v:+.{nd}f}"
+        t = f"{v:+.{nd}f}" if round(v, nd) != 0 else f"{0:.{nd}f}"
         return f"${t}$" if tex else t.replace("-", "\u2212")
 
     def span(vals, nd=1, tex=True):
@@ -470,7 +485,8 @@ def main():
                 put(f"MSigFour{tag}", f"{sum(r[3] < malpha for r in r4)} of {len(r4)}")
             t = A.paired("mmlu", ("hf", size, "bf16"), ("vllm", size, "bf16"))
             if t:
-                put(f"MBackendNoise{tag}", abs(t["delta_pp"]), "{:.1f}")
+                v = abs(t["delta_pp"])
+                put(f"MBackendNoise{tag}", "less than 0.1" if v < 0.05 else f"{v:.1f}")
     # 8-bit kernels (GPTQ-INT8, FP8) on both benchmarks; LLM.int8() and 4-bit costs on MMLU
     kern8 = []
     for bench in ("gsm8k", "mmlu"):
@@ -582,15 +598,25 @@ def main():
 
     fq, fr = pair.get("7b") or {}, pair.get("q3-8b") or {}
     keys = [("fp8", "FP8"), ("int8", "LLM.int8()"), ("awq-int4", "AWQ-INT4"), ("nf4", "NF4")]
-    have = [(k, n) for k, n in keys if ok(fr.get(f"d_mmlu_{k}", float("nan")))]
+    have = [(k, n) for k, n in keys if ok(fr.get(f"d_mmlu_{k}", float("nan"))) and ok(fq.get(f"d_mmlu_{k}", float("nan")))]
     if have:
-        def lst(fs, bench):
-            return ", ".join(f"{sg(fs[f'd_{bench}_{k}'])} ({n})" for k, n in have if ok(fs.get(f"d_{bench}_{k}", float("nan"))))
+        def lst(fs):
+            return ", ".join(f"{sg(fs[f'd_mmlu_{k}'])} ({n})" for k, n in have)
+        rmax = max(abs(fr[f"d_mmlu_{k}"]) for k, _ in have)
+        qmax = max(abs(fq[f"d_mmlu_{k}"]) for k, _ in have)
         gmax = max(abs(fr[f"d_gsm8k_{k}"]) for k, _ in have if ok(fr.get(f"d_gsm8k_{k}", float("nan"))))
-        nsig = sum(fr.get(f"p_mmlu_{k}", 1) < 0.05 / len(have) for k, _ in have)
-        put("FamQualitySentence", f"Quality costs are of the same order: relative to BF16, Qwen3-8B's MMLU accuracy "
-            f"changes by {lst(fr, 'mmlu')} points ({nsig} of {len(have)} significant after correction), against "
-            f"{lst(fq, 'mmlu')} for Qwen2.5-7B, and no GSM8K change exceeds {gmax:.1f} points.")
+        txt = (f"Quality costs are {'smaller' if rmax < qmax else 'of the same order'}: Qwen3-8B's MMLU accuracy changes by "
+               f"{lst(fr)} points relative to BF16, against {lst(fq)} for Qwen2.5-7B, and no GSM8K change exceeds "
+               f"{gmax:.1f} points.")
+        fp, awq = fr.get("d_mmlu_fp8", float("nan")), fr.get("d_mmlu_awq-int4", float("nan"))
+        if ok(fp) and ok(awq) and abs(fp) >= abs(awq) - 0.1:
+            txt += (" The ordering seen on Qwen2.5, where 8-bit formats are free and 4-bit formats are not, does not hold "
+                    "here: FP8 costs as much as AWQ-INT4. Which format preserves quality is a property of the model and "
+                    "must be measured, not assumed from the bit-width.")
+        put("FamQualitySentence", txt)
+        if "does not hold" in txt and "QualityConclusion" in NUMS:
+            put("QualityConclusion", NUMS["QualityConclusion"].rstrip(".") + "; on Qwen3-8B, however, FP8 costs as much "
+                "MMLU accuracy as AWQ-INT4, so the quality ranking of formats must be measured per model.")
     else:
         put("FamQualitySentence", "")
 

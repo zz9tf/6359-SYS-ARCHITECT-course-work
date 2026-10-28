@@ -9,7 +9,7 @@ where exactly one of the two runs is correct, and correct for the number of comp
 kernels and accumulation orders, and greedy decoding turns the resulting rounding differences into
 different reasoning chains: the two backends disagree on \BackendFlipsSeven{} of the 7B model's
 GSM8K questions and their accuracies differ by \BackendNoiseSeven{} points. On MMLU, where the
-answer is a single token, they differ by only \MBackendNoiseSeven{} points (\MBackendNoiseThree{}
+answer is a single token, they differ by \MBackendNoiseSeven{} points (\MBackendNoiseThree{}
 on 3B). Differences of this size are not caused by quantization.
 
 \textbf{8-bit formats preserve quality.} GPTQ-INT8 and FP8 W8A8 stay within \EightKernMax{} points
@@ -19,12 +19,12 @@ LLM.int8() on the 3B model, which changes MMLU accuracy by \IntMMLUThree{} point
 on 7B \IntMMLUSeven, \IntMMLUpSeven).
 
 \textbf{4-bit formats cost measurable quality, most on the smallest model.} MMLU resolves what
-GSM8K cannot. The 4-bit formats lower MMLU accuracy by \MDFourMinThree{} to \MDFourMaxThree{}
+GSM8K cannot. The 4-bit formats change MMLU accuracy by \MDFourMinThree{} to \MDFourMaxThree{}
 points on the 3B model, \MDFourMinSeven{} to \MDFourMaxSeven{} on 7B and \MDFourMinFourteen{} to
 \MDFourMaxFourteen{} on 14B; \MSigFourThree{}, \MSigFourSeven{} and \MSigFourFourteen{} of these
 drops remain significant after correcting for all \MNumTests{} MMLU comparisons. Perplexity tells
 the same story (\PPLFourMinSeven{} to \PPLFourMaxSeven{} on 7B, \PPLFourMinThree{} to
-\PPLFourMaxThree{} on 3B). On GSM8K, the 3B model loses \DFourMinThree{} to \DFourMaxThree{} points
+\PPLFourMaxThree{} on 3B). On GSM8K, the 3B model's accuracy changes by \DFourMinThree{} to \DFourMaxThree{} points
 (\FourThreeSurvive{} significant after correction), while the 7B model's changes of
 \DFourMinSeven{} to \DFourMaxSeven{} points are within the noise of 1,319 questions. A smaller
 model has less redundancy to absorb the rounding error.
@@ -33,7 +33,7 @@ model has less redundancy to absorb the rounding error.
 memory. \QualityGuide{} At a fixed memory budget, parameters are worth more than bits.
 
 \textbf{One metric is not enough.} The 14B GPTQ-INT4 checkpoint scores \AccGPTQFourFourteenPct\%
-on GSM8K and loses only \MGPTQFourFourteen{} points on MMLU, on par with the other 14B formats, yet
+on GSM8K and changes MMLU accuracy by only \MGPTQFourFourteen{} points, on par with the other 14B formats, yet
 its WikiText-2 perplexity is \PPLGPTQFourFourteen{} against \PPLOthersFourteen{} for AWQ-INT4,
 GPTQ-INT8 and FP8. The outlier is not an artifact of our setup: it persists with BF16 instead of
 FP16 activations, the loss is elevated at every position of the 2048-token window, and the same

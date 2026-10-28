@@ -49,6 +49,8 @@ def signed(v, nd):
     """Signed delta with a real minus sign; '--' when either side is missing."""
     if v is None or np.isnan(v):
         return "--"
+    if round(v, nd) == 0:
+        return f"${0:.{nd}f}$"
     return f"${v:+.{nd}f}$"
 
 

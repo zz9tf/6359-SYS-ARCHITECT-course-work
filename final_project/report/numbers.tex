@@ -58,7 +58,7 @@
 \newcommand{\FamQFPone}{1.59$\times$}
 \newcommand{\FamQFPthr}{1.76$\times$}
 \newcommand{\FamQGAWQ}{$-0.5$}
-\newcommand{\FamQGFP}{$+0.0$}
+\newcommand{\FamQGFP}{$0.0$}
 \newcommand{\FamQGINT}{$-0.2$}
 \newcommand{\FamQGNF}{$-0.5$}
 \newcommand{\FamQINTone}{0.29$\times$}
@@ -70,7 +70,7 @@
 \newcommand{\FamQMNF}{$-0.6$}
 \newcommand{\FamQNFone}{1.13$\times$}
 \newcommand{\FamQNFsave}{2.60$\times$}
-\newcommand{\FamQualitySentence}{Quality costs are of the same order: relative to BF16, Qwen3-8B's MMLU accuracy changes by $-0.7$ (FP8), $-0.7$ (AWQ-INT4), $-0.3$ (NF4) points (2 of 3 significant after correction), against $-0.1$ (FP8), $-1.6$ (AWQ-INT4), $-0.6$ (NF4) for Qwen2.5-7B, and no GSM8K change exceeds 0.5 points.}
+\newcommand{\FamQualitySentence}{Quality costs are smaller: Qwen3-8B's MMLU accuracy changes by $-0.7$ (FP8), $+0.7$ (LLM.int8()), $-0.7$ (AWQ-INT4), $-0.3$ (NF4) points relative to BF16, against $-0.1$ (FP8), $-0.2$ (LLM.int8()), $-1.6$ (AWQ-INT4), $-0.6$ (NF4) for Qwen2.5-7B, and no GSM8K change exceeds 0.6 points. The ordering seen on Qwen2.5, where 8-bit formats are free and 4-bit formats are not, does not hold here: FP8 costs as much as AWQ-INT4. Which format preserves quality is a property of the model and must be measured, not assumed from the bit-width.}
 \newcommand{\FamRAWQone}{2.33$\times$}
 \newcommand{\FamRAWQsave}{2.67$\times$}
 \newcommand{\FamRAWQthr}{1.12$\times$}
@@ -80,7 +80,7 @@
 \newcommand{\FamRFPthr}{1.67$\times$}
 \newcommand{\FamRGAWQ}{$-0.2$}
 \newcommand{\FamRGFP}{$+0.5$}
-\newcommand{\FamRGINT}{n/a}
+\newcommand{\FamRGINT}{$+0.6$}
 \newcommand{\FamRGNF}{$+0.2$}
 \newcommand{\FamRGSMbf}{91.4}
 \newcommand{\FamRINTone}{0.28$\times$}
@@ -88,13 +88,14 @@
 \newcommand{\FamRLayers}{36}
 \newcommand{\FamRMAWQ}{$-0.7$}
 \newcommand{\FamRMFP}{$-0.7$}
-\newcommand{\FamRMINT}{n/a}
+\newcommand{\FamRMINT}{$+0.7$}
 \newcommand{\FamRMMLUbf}{69.6}
 \newcommand{\FamRMNF}{$-0.3$}
 \newcommand{\FamRNFone}{0.90$\times$}
 \newcommand{\FamRNFsave}{2.55$\times$}
 \newcommand{\FloorThree}{3.8}
 \newcommand{\FourThreeSurvive}{3 of 3}
+\newcommand{\FourteenNFcap}{For the 14B model, whose BF16 weights alone take 29.5\,GB, NF4 does buy capacity: it runs 16 prompts of 2048 tokens and 64 prompts of 512 tokens, which run out of memory in BF16.}
 \newcommand{\FourteenNote}{In BF16 the 14B model's 29.5\,GB of weights leave no room for any KV cache even when vLLM may use 95\% of the GPU, so it cannot be served at all, while its AWQ-INT4 version runs with 82K cached tokens.}
 \newcommand{\GPTQeightspeedup}{1.64$\times$}
 \newcommand{\GuideHead}{Prefer a larger quantized model to a smaller full-precision one.}
@@ -114,9 +115,9 @@
 \newcommand{\KernIntRatio}{3.7$\times$}
 \newcommand{\LoadIntEightSeven}{12.5}
 \newcommand{\LoadIntRatio}{7$\times$}
-\newcommand{\MBackendNoiseSeven}{0.0}
+\newcommand{\MBackendNoiseSeven}{less than 0.1}
 \newcommand{\MBackendNoiseThree}{0.1}
-\newcommand{\MDEightAbsFourteen}{0.1}
+\newcommand{\MDEightAbsFourteen}{0.3}
 \newcommand{\MDEightAbsSeven}{0.2}
 \newcommand{\MDEightAbsThree}{1.1}
 \newcommand{\MDFourMaxFourteen}{$-0.6$}
@@ -133,11 +134,11 @@
 \newcommand{\MMLUBFSeven}{71.4}
 \newcommand{\MMLUBFThree}{63.5}
 \newcommand{\MMLUBigP}{$p<0.001$}
-\newcommand{\MNumTests}{16}
-\newcommand{\MSigEightFourteen}{0 of 2}
+\newcommand{\MNumTests}{18}
+\newcommand{\MSigEightFourteen}{0 of 3}
 \newcommand{\MSigEightSeven}{0 of 3}
 \newcommand{\MSigEightThree}{1 of 3}
-\newcommand{\MSigFourFourteen}{1 of 2}
+\newcommand{\MSigFourFourteen}{1 of 3}
 \newcommand{\MSigFourSeven}{3 of 3}
 \newcommand{\MSigFourThree}{3 of 3}
 \newcommand{\MarlinEightCross}{164}
@@ -151,6 +152,7 @@
 \newcommand{\MinPEightThree}{0.32}
 \newcommand{\ModelErrMax}{0.6}
 \newcommand{\NFcross}{7}
+\newcommand{\NFfourteenB}{1.22$\times$}
 \newcommand{\NFkernMmax}{0.58$\times$}
 \newcommand{\NFkernMone}{2.39$\times$}
 \newcommand{\NFsevenB}{1.13$\times$}
@@ -199,7 +201,7 @@
 \newcommand{\PowerInt}{164}
 \newcommand{\PowerRange}{410--579}
 \newcommand{\QualityAbstract}{Quality depends on the bit-width and the model size: GPTQ-INT8 and FP8 stay within 0.9 points of BF16 on GSM8K and MMLU, whereas 4-bit formats cost 0.6--2.8 MMLU points, most on the smallest model; still, a 14B model in AWQ-INT4 (10.1\,GB) beats the 7B model in BF16 (15.2\,GB) on both benchmarks.}
-\newcommand{\QualityConclusion}{8-bit formats with good kernels preserve quality; 4-bit formats cost 0.6--2.8 MMLU points, more on smaller models, yet a larger 4-bit model still beats a smaller 16-bit one at less memory.}
+\newcommand{\QualityConclusion}{8-bit formats with good kernels preserve quality; 4-bit formats cost 0.6--2.8 MMLU points, more on smaller models, yet a larger 4-bit model still beats a smaller 16-bit one at less memory; on Qwen3-8B, however, FP8 costs as much MMLU accuracy as AWQ-INT4, so the quality ranking of formats must be measured per model.}
 \newcommand{\QualityGuide}{Qwen2.5-14B in AWQ-INT4 needs 10.1\,GB of weights, less than the 15.2\,GB of Qwen2.5-7B in BF16, and scores 93.9\% vs.\ 90.8\% on GSM8K and 75.1\% vs.\ 71.4\% on MMLU (McNemar $p<0.001$ and $p<0.001$).}
 \newcommand{\QualityReadme}{GPTQ-INT8 and FP8 stay within 0.9 points of BF16 on GSM8K and MMLU (LLM.int8() costs 1.1 MMLU points on 3B); 4-bit formats cost 0.6–2.8 MMLU points, most on the smallest model; Qwen2.5-14B in AWQ-INT4 (10.1 GB) beats Qwen2.5-7B in BF16 (15.2 GB) on GSM8K (93.9\% vs 90.8\%) and MMLU (75.1\% vs 71.4\%).}
 \newcommand{\RecheckSentence}{Re-measuring vLLM BF16 on the 7B model after the interruption reproduced the original TPOT within 0.5\%.}

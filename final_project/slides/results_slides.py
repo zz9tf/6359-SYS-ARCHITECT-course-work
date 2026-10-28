@@ -298,8 +298,8 @@ def slide_general(prs, fig_dir):
     if not fig.exists() or "FamRAWQone" not in m:
         return
     s = U.content_slide(prs, "Does It Generalize? Qwen3-8B",
-                        f"Same measurements on a newer model ({m.get('FamRLayers')} layers, {m.get('FamRKVheads')} KV heads; "
-                        "non-thinking mode) \u2014 the systems picture carries over",
+                        f"Qwen3-8B ({m.get('FamRLayers')} layers, {m.get('FamRKVheads')} KV heads, non-thinking): "
+                        "the systems picture carries over",
                         notes=("Qwen3-8B reproduces the decode speedups of AWQ and FP8 and the LLM.int8() slowdown within a few "
                                "percent. NF4 turns from a small gain into a loss because the 36-layer model is host-bound at "
                                "batch 1, exactly like the 36-layer Qwen2.5-3B."))
@@ -332,8 +332,9 @@ def slide_takeaways(prs, f):
               "the BF16 throughput at batch 256, where 4-bit weight-only gains have vanished"),
              ("LuTriangleAlert", "bitsandbytes: memory, not speed", f"{1 / sv('hf', 'int8'):.1f}\u00d7",
               "slower decode with LLM.int8() at batch size 1; NF4 helps only tiny batches"),
-             ("LuScale", "Quality: 8-bit free, 4-bit not", f"{m.get('MFourMin', '?')} pp",
-              f"worst MMLU pp with 4-bit (3B); GPTQ-INT8 / FP8 within {m.get('EightKernMax', '?')} pp everywhere"),
+             ("LuScale", "Quality: small, but per model", f"{m.get('MFourMin', '?')} pp",
+              f"worst 4-bit MMLU loss (Qwen2.5-3B); 8-bit within {m.get('EightKernMax', '?')} pp, yet FP8 = AWQ on "
+              "Qwen3-8B \u2014 measure it"),
              ("LuLayers", "Spend memory on parameters", f"{m.get('MMLUAWQFourteen', '?')}%",
               f"MMLU of 14B AWQ-INT4 vs {m.get('MMLUBFSeven', '?')}% for 7B BF16, with less weight memory")]
     w, h = 2.93, 1.55

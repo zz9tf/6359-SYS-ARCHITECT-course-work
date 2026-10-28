@@ -95,12 +95,13 @@ def fig_weights():
             bits = {"bf16": 16, "int8": 8, "nf4": 4, "fp8": 8, "gptq-int8": 8, "awq-int4": 4, "gptq-int4": 4}[p]
             ax.plot([xi - 0.39, xi + 0.39], [M.naive_weight_bytes(pb, bits) / A.GB] * 2, color=S.INK, lw=1.2)
         ax.set_xticks(x)
-        ax.set_xticklabels(["BF16", "INT8", "NF4", "BF16", "FP8", "GPTQ8", "AWQ4", "GPTQ4"], fontsize=7 * FS, rotation=0)
+        ax.set_xticklabels(["BF16", "INT8", "NF4", "BF16", "FP8", "GPTQ\n8-bit", "AWQ\n4-bit", "GPTQ\n4-bit"],
+                           fontsize=7 * FS, rotation=0, linespacing=0.95)
         ax.set_title(SIZE_LABEL[size])
         ax.set_ylabel("weight memory (GB)" if size == sizes[0] else "")
         ax.grid(axis="x", visible=False)
         for xc, name in ((1, "HF + bitsandbytes"), (5.6, "vLLM")):
-            ax.text(xc, -0.13, name, transform=ax.get_xaxis_transform(), ha="center", va="top",
+            ax.text(xc, -0.2, name, transform=ax.get_xaxis_transform(), ha="center", va="top",
                     fontsize=8 * FS, fontweight="bold", color=S.INK)
     handles = [Patch(facecolor="white", edgecolor=S.INK2, hatch="////", label="measured, HF + bitsandbytes"),
                Patch(facecolor=S.INK2, label="measured, vLLM"),
@@ -562,8 +563,9 @@ def fig_generalization():
         ax.set_ylabel(yl)
         ax.set_title(title)
         ax.grid(axis="x", visible=False)
-    lo = min(fq.get("d_mmlu_awq-int4", 0), fr.get("d_mmlu_awq-int4", 0), -1)
-    ax2.set_ylim(lo * 1.45, 0.6)
+    vals = [fs.get(f"d_mmlu_{c}", np.nan) for fs in (fq, fr) for c, _ in cfg]
+    vals = [v for v in vals if not np.isnan(v)]
+    ax2.set_ylim(min(min(vals), -1) * 1.45, max(max(vals), 0.3) * 1.8)
     ax1.legend(loc="upper right", frameon=False)
     fig.tight_layout()
     save(fig, "general_qwen3")

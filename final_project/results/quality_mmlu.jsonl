@@ -24,3 +24,6 @@
 {"timestamp": "2026-10-27T20:17:32", "backend": "vllm", "size": "q3-8b", "precision": "awq-int4", "n": 14042, "accuracy": 0.6891468451787495, "n_correct": 9677, "time_s": 180.7239178990003}
 {"timestamp": "2026-10-27T20:31:02", "backend": "hf", "size": "q3-8b", "precision": "bf16", "n": 14042, "accuracy": 0.6963395527702606, "n_correct": 9778, "time_s": 201.19622147299742}
 {"timestamp": "2026-10-27T20:45:43", "backend": "hf", "size": "q3-8b", "precision": "nf4", "n": 14042, "accuracy": 0.692850021364478, "n_correct": 9729, "time_s": 221.20032766700024}
+{"timestamp": "2026-10-27T21:28:40", "backend": "hf", "size": "q3-8b", "precision": "int8", "n": 14042, "accuracy": 0.7030337558752314, "n_correct": 9872, "time_s": 222.2210958579999}
+{"timestamp": "2026-10-27T22:24:44", "backend": "hf", "size": "14b", "precision": "nf4", "n": 14042, "accuracy": 0.7639225181598063, "n_correct": 10727, "time_s": 428.89493590700295}
+{"timestamp": "2026-10-27T22:32:11", "backend": "hf", "size": "14b", "precision": "int8", "n": 14042, "accuracy": 0.7662726107392109, "n_correct": 10760, "time_s": 442.930411415}

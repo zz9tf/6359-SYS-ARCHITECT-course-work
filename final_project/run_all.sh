@@ -72,6 +72,8 @@ for size in 3b 7b; do
   python scripts/eval_mmlu.py --backend hf --size $size --precision int8 --batch 8
 done
 python scripts/eval_mmlu.py --backend hf --size 14b --precision bf16 --batch 8
+python scripts/eval_mmlu.py --backend hf --size 14b --precision nf4 --batch 16
+python scripts/eval_mmlu.py --backend hf --size 14b --precision int8 --batch 4
 # Diagnosing the 14B GPTQ-INT4 perplexity outlier: activation dtype, and next-token ranking on raw vs chat text
 python scripts/eval_ppl.py --backend vllm --size 14b --precision gptq-int4 --dtype bfloat16 --out results/quality_ppl_diag.jsonl
 for s in 14b 7b; do for p in gptq-int4 awq-int4 gptq-int8 fp8; do

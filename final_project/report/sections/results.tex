@@ -36,8 +36,9 @@ shrinks as more tokens are in flight (\cref{fig:memscale}). For Qwen2.5-7B on HF
 memory \MemSmallNF{} for one short request but only \MemBigNF{} at $B=32$, $L=2048$. INT8 is worse:
 LLM.int8() keeps FP16 and INT8 copies of the activations plus the outlier columns, so its
 activation workspace is \ActIntRatio{} that of BF16 and its saving drops to \MemBigInt{}. Nor did
-quantization let HF serve more long prompts: BF16, INT8 and NF4 all run out of memory at $B=64$,
-$L=2048$, where prefill activations rather than weights dominate.
+quantization let HF serve more long prompts on the 7B model: BF16, INT8 and NF4 all run out of
+memory at $B=64$, $L=2048$, where prefill activations rather than weights dominate.
+\FourteenNFcap{}
 
 \begin{figure}[t]
 \centering
@@ -85,8 +86,8 @@ amortizes their overheads.
 \BWutilVllm\% of the time needed to stream 15.2\,GB of weights at the measured bandwidth, so
 fewer bytes translate almost directly into speed: AWQ-INT4 is \AWQspeedup{} faster, GPTQ-INT8
 \GPTQeightspeedup{} and FP8 \FPeightspeedup. On HF the same idea fails: LLM.int8() is
-\INTeightslowdown{} slower, and NF4 is \NFsevenB{} faster on the 7B model but \NFthreeslow{}
-slower on the 3B model, whose BF16 step is already limited by the host rather than by memory
+\INTeightslowdown{} slower, and NF4 is \NFsevenB{} faster on the 7B model and \NFfourteenB{} on
+the 14B model but \NFthreeslow{} slower on the 3B model, whose BF16 step is already limited by the host rather than by memory
 (\cref{sec:mechanism}).
 
 \textbf{Throughput.} The decode advantage of weight-only formats fades with batch size. At

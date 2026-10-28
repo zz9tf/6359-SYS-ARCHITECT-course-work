@@ -36,7 +36,7 @@ def slide_title(prs):
 
 def slide_setup(prs, facts):
     s = U.content_slide(prs, "What We Measured",
-                        "2 backends × 8 configurations × 3 model sizes — every number measured on one GPU",
+                        "2 backends × 8 configurations × 4 models (Qwen2.5-3B/7B/14B, Qwen3-8B) on one GPU",
                         notes="Hardware, the eight configurations, the workloads and how we time things.")
     x0, w = 0.5, 2.9
     # platform card
@@ -48,7 +48,7 @@ def slide_setup(prs, facts):
         [("Measured: ", {"bold": True, "color": U.NAVY}), (f"{facts['bw']:.2f} TB/s DRAM, {facts['bf16']:.0f} TFLOP/s BF16"
                                                            + (f", {facts['fp8']:.0f} TFLOP/s FP8" if facts.get('fp8') else ""), {})],
         [("Software: ", {"bold": True, "color": U.NAVY}), ("PyTorch 2.13, Transformers 5.19, bitsandbytes 0.50, vLLM 0.32", {})],
-        [("Models: ", {"bold": True, "color": U.NAVY}), ("Qwen2.5-3B / 7B / 14B-Instruct", {})],
+        [("Models: ", {"bold": True, "color": U.NAVY}), ("Qwen2.5-3B / 7B / 14B-Instruct; Qwen3-8B as a second family", {})],
     ], size=9.5, space_after=4)
     # configs card (two columns)
     x1, w1 = x0 + w + 0.15, 9.5 - (x0 + w + 0.15)
@@ -75,10 +75,10 @@ def slide_setup(prs, facts):
     U.card_header(s, x1, y2, w1, "LuGauge", "Workloads and metrics")
     U.text(s, x1 + 0.16, y2 + 0.48, w1 - 0.3, U.BOT - y2 - 0.5, [
         [("Controlled sweep: ", {"bold": True, "color": U.NAVY}),
-         ("batch 1–256 × prompt 128–2048 tokens, exactly 128 output tokens", {})],
+         ("batch 1–256 × prompt 128–2048 tokens × 32–512 output tokens", {})],
         [("Real workload: ", {"bold": True, "color": U.NAVY}),
          ("300 ShareGPT requests (fixed seed), 1–64 concurrent clients", {})],
-        [("Quality: ", {"bold": True, "color": U.NAVY}), ("WikiText-2 perplexity, GSM8K (all 1,319 questions)", {})],
+        [("Quality: ", {"bold": True, "color": U.NAVY}), ("WikiText-2 perplexity, GSM8K (1,319 q.), MMLU (14,042 q.), paired McNemar tests", {})],
         [("Metrics: ", {"bold": True, "color": U.NAVY}),
          ("peak memory, TTFT, TPOT, tokens/s, energy (J/token); 1 warm-up + 3 repeats", {})],
     ], size=9, space_after=3)
@@ -90,7 +90,7 @@ def slide_team_refs(prs):
     w = 2.9
     roles = [("Sijia Zhong", "Baseline + memory (Q1)", "Benchmark harness, memory model, capacity", "LuMemoryStick"),
              ("Zheng Zheng", "Controlled sweeps (Q2)", "Precision × batch × length grids, kernels, profiling", "LuSlidersHorizontal"),
-             ("Haofei Sun", "Real workload + quality (Q3, Q4)", "ShareGPT serving, WikiText-2, GSM8K", "LuMessagesSquare")]
+             ("Haofei Sun", "Real workload + quality (Q3, Q4)", "ShareGPT serving, WikiText-2, GSM8K, MMLU", "LuMessagesSquare")]
     for i, (name, role, task, ic) in enumerate(roles):
         x = 0.5 + i * (w + 0.15)
         U.box(s, x, U.TOP, w, 1.05, fill=U.LIGHT, radius=0.08)
@@ -103,7 +103,7 @@ def slide_team_refs(prs):
         "Frantar et al., GPTQ, ICLR 2023  ·  Lin et al., AWQ, MLSys 2024  ·  Xiao et al., SmoothQuant, ICML 2023",
         "Frantar et al., MARLIN mixed-precision kernels, PPoPP 2025  ·  Kwon et al., vLLM / PagedAttention, SOSP 2023",
         "Micikevicius et al., FP8 Formats for Deep Learning, 2022  ·  Williams et al., Roofline, CACM 2009",
-        "Qwen Team, Qwen2.5 Technical Report, 2024  ·  Merity et al., WikiText (ICLR 2017)  ·  Cobbe et al., GSM8K, 2021",
+        "Qwen Team, Qwen2.5 / Qwen3 Technical Reports, 2024/2025  ·  Merity et al., WikiText (ICLR 2017)  ·  Cobbe et al., GSM8K, 2021  ·  Hendrycks et al., MMLU (ICLR 2021)",
     ]
     y = U.TOP + 1.25
     U.card_header(s, 0.36, y - 0.1, 9.0, "LuBookOpen", "References")

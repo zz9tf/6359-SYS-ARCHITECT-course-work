@@ -8,11 +8,11 @@
 | Decode speedup $B=1$, LLM.int8()    | 0.29$\times$      | 0.28$\times$      |
 | Throughput $B=64$, AWQ-INT4         | 1.15$\times$      | 1.12$\times$      |
 | Throughput $B=64$, FP8              | 1.76$\times$      | 1.67$\times$      |
-| GSM8K $\Delta$ pp ($p$), FP8        | $+0.0$ (1.000)    | $+0.5$ (0.488)    |
-| GSM8K $\Delta$ pp ($p$), LLM.int8() | $-0.2$ (0.771)    | --                |
+| GSM8K $\Delta$ pp ($p$), FP8        | $0.0$ (1.000)     | $+0.5$ (0.488)    |
+| GSM8K $\Delta$ pp ($p$), LLM.int8() | $-0.2$ (0.771)    | $+0.6$ (0.382)    |
 | GSM8K $\Delta$ pp ($p$), AWQ-INT4   | $-0.5$ (0.576)    | $-0.2$ (0.818)    |
 | GSM8K $\Delta$ pp ($p$), NF4        | $-0.5$ (0.500)    | $+0.2$ (0.909)    |
 | MMLU $\Delta$ pp ($p$), FP8         | $-0.1$ (0.327)    | $-0.7$ ($<$0.001) |
-| MMLU $\Delta$ pp ($p$), LLM.int8()  | $-0.2$ (0.134)    | --                |
+| MMLU $\Delta$ pp ($p$), LLM.int8()  | $-0.2$ (0.134)    | $+0.7$ ($<$0.001) |
 | MMLU $\Delta$ pp ($p$), AWQ-INT4    | $-1.6$ ($<$0.001) | $-0.7$ (0.003)    |
 | MMLU $\Delta$ pp ($p$), NF4         | $-0.6$ (0.002)    | $-0.3$ (0.156)    |

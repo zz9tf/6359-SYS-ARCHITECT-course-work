@@ -24,8 +24,8 @@ memory floor), so fewer bytes cannot help, NF4 never beats BF16, and LLM.int8() 
 
 \section{Detailed results}
 \label{app:tables}
-\Cref{tab:weights,tab:speed} list the weight memory of every configuration and the latency,
-throughput and energy of the 7B model behind \cref{fig:weights,fig:latency}.
+\Cref{tab:weights,tab:speed} list the weight memory of every configuration of the 7B and 14B
+models and the latency, throughput and energy of the 7B model behind \cref{fig:weights,fig:latency}.
 
 \input{tables/t_weight_memory}
 \input{tables/t_speed}
@@ -35,7 +35,7 @@ throughput and energy of the 7B model behind \cref{fig:weights,fig:latency}.
 Every number in this report is generated from the raw measurements by
 \texttt{scripts/make\_numbers.py}; figures and tables come from \texttt{make\_figures.py} and
 \texttt{make\_tables.py}. \texttt{run\_all.sh} re-runs all experiments
-(about nine GPU-hours on an RTX 5090). A job queue ran the experiments one at a time and only
+(about eleven GPU-hours on an RTX 5090). A job queue ran the experiments one at a time and only
 while no other user's process was on the GPU; rows written while the GPU was shared
 (\ExcludedWindows, logged in \texttt{results/excluded\_windows.jsonl}) are discarded and those jobs
 were re-run. \RecheckSentence
