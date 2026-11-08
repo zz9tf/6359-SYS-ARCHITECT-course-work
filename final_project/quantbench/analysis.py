@@ -400,9 +400,9 @@ TREND_SIZES = ("3b", "7b", "q3-8b")           # models with BF16, FP8 and AWQ-IN
 TREND_PRECS = (("bf16", 16), ("fp8", 8), ("awq-int4", 4))
 
 
-def bits_trend(L=512, B_thr=64):
-    """Each model against its own vLLM BF16 (same stack, same workload): decode speed at B=1,
-    throughput at B=B_thr (output tokens/s) and MMLU accuracy, for 16-, 8- and 4-bit weights."""
+def bits_trend(L=512, B=64):
+    """Each model against its own vLLM BF16 (same stack, same workload, one batch size B): decode speed
+    (time per output token), throughput (output tokens/s) and MMLU accuracy, for 16-, 8- and 4-bit weights."""
     agg, _ = sweeps()
     g = agg[(agg.backend == "vllm") & (agg.input_len == L) & (agg.output_len == 128) & (agg.tag == "grid")]
     mm = mmlu()
@@ -418,7 +418,7 @@ def bits_trend(L=512, B_thr=64):
             return float(r.accuracy.iloc[-1]) * 100 if len(r) else float("nan")
         for prec, bits in TREND_PRECS:
             rows.append(dict(size=size, precision=prec, bits=bits,
-                             speed=cell("bf16", 1, "tpot") / cell(prec, 1, "tpot"),
-                             thr=cell(prec, B_thr, "out_tok_s") / cell("bf16", B_thr, "out_tok_s"),
+                             speed=cell("bf16", B, "tpot") / cell(prec, B, "tpot"),
+                             thr=cell(prec, B, "out_tok_s") / cell("bf16", B, "out_tok_s"),
                              dacc=acc(prec) - acc("bf16")))
     return pd.DataFrame(rows)

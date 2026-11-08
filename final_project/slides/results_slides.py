@@ -325,20 +325,20 @@ def slide_general(prs, fig_dir):
     if not fig.exists() or "GenSpeedFour" not in m:
         return
     s = U.content_slide(prs, "Does It Generalize? Same Trends",
-                        "vLLM, each model vs. its own BF16: fewer bits move speed, throughput and accuracy the same way",
+                        "vLLM, batch 64, each model vs. its own BF16: the three lines have the same shape",
                         notes=("Generalization means: do the findings hold on other models? To keep it a fair test we "
                                "change one thing at a time: same GPU, same stack (vLLM), same workload, and each model is "
-                               "compared only with its own BF16 version. Only the bit-width changes: 16-bit BF16, 8-bit "
+                               "compared only with its own BF16 version, all at batch size 64. Only the bit-width changes: 16-bit BF16, 8-bit "
                                "FP8, 4-bit AWQ. Three models, from two families: Qwen2.5-3B, Qwen2.5-7B and Qwen3-8B. "
-                               f"Speed (decode, batch 1): every model gets faster with fewer bits, {m['GenSpeedEight']} at "
-                               f"8 bits and {m['GenSpeedFour']} at 4 bits. Throughput (batch 64): every model peaks at "
-                               f"8 bits, {m['GenThrEight']}, because FP8 also speeds up the math; 4-bit falls back to "
-                               f"{m['GenThrFour']} because the batch makes decoding compute-bound. Accuracy (MMLU): no "
+                               f"Speed (time per output token): every model is {m['GenSpeedEight']} faster at 8 bits, and 4 bits "
+                               f"add nothing more ({m['GenSpeedFour']}) because at batch 64 the math, not the weight bytes, "
+                               f"sets the step time. Throughput (output tokens per second, including the prompts): every "
+                               f"model peaks at 8 bits, {m['GenThrEight']}, because FP8 also speeds up the math; 4-bit falls "
+                               f"back to {m['GenThrFour']} because its prompt processing is no faster than BF16. Accuracy (MMLU): no "
                                f"model gains; 8 bits cost {m['GenAccEight']} points and 4 bits {m['GenAccFour']}. The "
                                "lines have the same shape for all three models, so the trends are not specific to one "
-                               "model. The sizes differ a little: the smallest model gains least in speed and loses "
-                               "most at 4 bits."))
-    tiles = [(m["GenSpeedFour"], "Speed at 4 bits, all models", "decode, batch 1, vs. own BF16"),
+                               "model. The sizes differ a little: the smallest model gains least and loses most accuracy at 4 bits."))
+    tiles = [(m["GenSpeedEight"], "Speed at 8 bits, all models", f"4-bit: {m['GenSpeedFour']}"),
              (m["GenThrEight"], "Throughput at 8 bits (the peak)", f"4-bit only {m['GenThrFour']}"),
              (m["GenAccFour"], "MMLU points at 4 bits", f"8-bit: {m['GenAccEight']}")]
     figure_with_tiles_below(s, fig, tiles, alt="Speed, throughput and MMLU change against bit-width for Qwen2.5-3B, "

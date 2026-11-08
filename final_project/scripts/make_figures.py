@@ -924,8 +924,8 @@ def fig_general_bits():
         return
     models = [("3b", "Qwen2.5-3B", "#8a6fd1", "o"), ("7b", "Qwen2.5-7B", S.INK2, "s"), ("q3-8b", "Qwen3-8B", S.BLUE, "D")]
     fig, axes = plt.subplots(1, 3, figsize=fsz((6.6, 2.0), (12.0, 3.6)))
-    panels = [("speed", "(a) Speed: decode, B = 1", "\u00d7 BF16 of the same model", 1.0),
-              ("thr", "(b) Throughput: B = 64", "\u00d7 BF16 of the same model", 1.0),
+    panels = [("speed", "(a) Speed: decode, B = 64", "\u00d7 BF16 of the same model", 1.0),
+              ("thr", "(b) Throughput, B = 64", "\u00d7 BF16 of the same model", 1.0),
               ("dacc", "(c) Accuracy: MMLU", "change vs. BF16 (points)", 0.0)]
     for ax, (col, title, yl, ref) in zip(axes, panels):
         ax.axhline(ref, color=S.INK2, lw=0.8, ls=":", zorder=1)
@@ -938,7 +938,7 @@ def fig_general_bits():
         ax.set_title(title)
         ax.set_ylabel(yl)
         ax.grid(axis="x", visible=False)
-    axes[0].set_ylim(0.8, 2.7)
+    axes[0].set_ylim(0.8, 2.0)
     axes[1].set_ylim(0.8, 2.0)
     axes[2].set_ylim(-2.8, 0.6)
     axes[0].legend(loc="upper left", frameon=False, fontsize=5.6 * FS / 0.8, handlelength=1.6)
