@@ -36,7 +36,8 @@ metric. Its columns give our main findings, and each finding limits the next:
 \includegraphics[width=\linewidth]{impact_matrix}
 \caption{\textbf{What each quantization configuration does to each metric} (Qwen2.5-7B). Rows group
 the configurations by what they quantize; each cell compares one with BF16 on the same stack. Memory
-and speed are ratios ($>1$: better); quality cells are coloured only if significant (\cref{sec:method}).}
+and speed are ratios ($>1$: better); quality cells are coloured only if significant (\cref{sec:method}).
+The two W8A8 rows differ because of their kernels (\cref{sec:mechanism}).}
 \label{fig:matrix}
 \end{figure}
 
@@ -46,7 +47,8 @@ and speed are ratios ($>1$: better); quality cells are coloured only if signific
 \item \textbf{Speed (Q2, \cref{sec:q2}).} The saved bytes become speed only with a fused kernel: vLLM
   turns \IdealAWQ--\IdealGQE\% of them into speed at batch size~1, bitsandbytes \IdealNF\% or less.
 \item \textbf{Crossover (Q3, \cref{sec:q3,sec:mechanism}).} The gain lasts only while decoding is
-  memory-bound, so batching ends it ($B\approx\AWQcross$); only FP8, which also cuts the compute, stays.
+  memory-bound, so batching ends it ($B\approx\AWQcross$); only FP8, whose fused kernel also
+  multiplies in 8 bits, stays.
 \item \textbf{Quality (Q4, \cref{sec:q4,sec:general}).} The cost is small at 8 bits and
   \MFourAbsMin--\MFourAbsMax{} MMLU points at 4 bits, less than the gain from a larger model.
 \end{enumerate}

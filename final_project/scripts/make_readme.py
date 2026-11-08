@@ -46,11 +46,17 @@ The figure reads from left to right, and each finding limits the next one.
    do not: NF4 is only {m['NFsevenB']} faster, and LLM.int8() is **{m['INTeightslowdown']} slower**.
 3. **Large batches: the gain lasts only while decoding is memory-bound.** Batching makes decoding
    compute-bound, so weight-only gains fade and vanish near **B ≈ {m['AWQcross']}** (AWQ-INT4, 512-token prompts).
-   Only **FP8 W8A8**, which also halves the compute, stays faster in every cell ({m['FPminEtoE']}–{m['FPmaxEtoE']}) and
-   gives **{m['ThrFPratio']}** the BF16 throughput at B = 256.
+   Only **FP8 W8A8**, whose fused kernel also multiplies in 8 bits, stays faster in every cell
+   ({m['FPminEtoE']}–{m['FPmaxEtoE']}) and gives **{m['ThrFPratio']}** the BF16 throughput at B = 256. LLM.int8() is W8A8
+   too, yet it is slower in every cell ({m['INTminEtoE']}–{m['INTmaxEtoE']}); finding 4 explains why.
 4. **Why: the roofline and the host.** Marlin W4A16 is {m['MarlinFourMone']} faster than cuBLAS at M = 1 and loses its
    gain at M ≈ {m['MarlinFourCross']}, where it hits the same BF16 compute roof. On HF, kernel launches on the CPU
    dominate: the GPU is busy only {m['BusyIntone']}% of an LLM.int8() decode step (BF16: {m['BusyBFone']}%).
+   The two W8A8 formats differ because of their kernels, not their number format. The GPU multiplies INT8
+   as fast as FP8 ({m['INTeightmeas']} TOPS vs. {m['FPeightmeas']} TFLOP/s), but LLM.int8() multiplies the outlier
+   columns of the activations separately, in 16 bits. Each multiply then needs over a dozen small kernels
+   ({m['KernIntRatio']} as many per step as BF16) and a wait for the GPU, so its layer runs at only
+   {m['INTkernMone']} of the BF16 speed at M = 1. FP8 needs two kernels and is faster at every M.
 5. **Quality: small cost at 8 bits, moderate at 4 bits.** GPTQ-INT8 and FP8 stay within {m['EightKernMax']} points of BF16
    on GSM8K and MMLU. 4-bit formats cost {m['MFourAbsMin']}–{m['MFourAbsMax']} MMLU points, most on the 3B model, where GSM8K
    drops as well ({m['DFourMinThree']} to {m['DFourMaxThree']} points).

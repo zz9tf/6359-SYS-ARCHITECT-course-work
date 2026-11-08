@@ -37,7 +37,7 @@
 \newcommand{\BigNFw}{20.7}
 \newcommand{\BigNaNwin}{13 of 146}
 \newcommand{\BigPPLawq}{7.88}
-\newcommand{\BigVerdict}{A model four times larger, using only 1.20$\times$ the weight memory, is significantly better on both benchmarks. On this GPU, that model can run only because of quantization.}
+\newcommand{\BigVerdict}{A model four times larger, using only 1.20$\times$ the weight memory, is significantly better on both benchmarks.}
 \newcommand{\BonfAlpha}{0.0028}
 \newcommand{\BusyBFone}{97}
 \newcommand{\BusyIntone}{28}
@@ -119,8 +119,13 @@
 \newcommand{\FourteenNFcap}{For the 14B model, whose BF16 weights alone take 29.5\,GB, NF4 does buy capacity: it runs 16 prompts of 2048 tokens and 64 prompts of 512 tokens, which run out of memory in BF16.}
 \newcommand{\FourteenNote}{The 14B model is the extreme case. In BF16 its 29.5\,GB of weights leave no room for a KV cache, even when vLLM may use 95\% of the GPU, so vLLM cannot serve it at all. In AWQ-INT4 it runs with 82K cached tokens.}
 \newcommand{\GPTQeightspeedup}{1.64$\times$}
+\newcommand{\GemmBFone}{9.3}
+\newcommand{\GemmIntone}{4.8}
 \newcommand{\GuideHead}{Prefer a larger quantized model to a smaller full-precision one.}
+\newcommand{\INTeightmeas}{650}
 \newcommand{\INTeightslowdown}{3.4$\times$}
+\newcommand{\INTkernMmax}{1.33$\times$}
+\newcommand{\INTkernMone}{0.49$\times$}
 \newcommand{\INTkernRange}{0.40--1.33$\times$}
 \newcommand{\INTmaxEtoE}{0.71$\times$}
 \newcommand{\INTminEtoE}{0.27$\times$}

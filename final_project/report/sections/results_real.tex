@@ -1,9 +1,8 @@
 \answer{Yes. The serving stack matters even more than the format.}
-A replay of 300 ShareGPT requests repeats the batch-size story (\cref{tab:serving_main} in
-\cref{app:real}). With one client, decoding is memory-bound, so AWQ-INT4 gives the lowest TPOT
+A replay of 300 ShareGPT requests repeats the batch-size story (\cref{tab:serving_main}). With one client, decoding is memory-bound, so AWQ-INT4 gives the lowest TPOT
 (\SrvTPOTawqOne\,ms vs.\ \SrvTPOTbfOne\,ms for BF16). With 64 clients it becomes compute-bound, so FP8
-gives the highest throughput (\SrvThrFP{} vs.\ \SrvThrBF{} tokens/s). The stack has a larger effect
-still: with the same 16 requests in flight and the same BF16 weights, vLLM delivers \SrvGap{} the
-throughput of HF, whose static batches wait for their longest prompt and answer. This gap belongs to
-continuous batching~\cite{yu2022orca} and CUDA graphs, not to quantization; the two stacks are also
-timed differently (\cref{app:real}).
+gives the highest throughput (\SrvThrFP{} vs.\ \SrvThrBF{} tokens/s). The stack matters more: with
+the same 16 requests in flight and the same BF16 weights, vLLM delivers \SrvGap{} the throughput of
+HF, whose static batches wait for their longest request. This gap comes from continuous
+batching~\cite{yu2022orca} and CUDA graphs, not from quantization (the stacks are timed differently;
+\cref{app:real}).

@@ -9,8 +9,8 @@ quality benchmarks. The results form a chain. First, 4-bit weights shrink a 7B m
 in 16 bits. Second, the saved bytes become speed only when decoding is memory-bound and a fused kernel
 hides the dequantization: at batch size~1, 4-bit weights decode \AWQspeedup{} faster on vLLM but only
 \NFsevenB{} faster with bitsandbytes. Third, batching makes decoding compute-bound, so these
-weight-only gains vanish, as a roofline model predicts; only FP8, which also quantizes the
-activations, stays faster at every batch size. Fourth, the gains cost little quality at 8 bits and
+weight-only gains vanish, as a roofline model predicts; only FP8, whose fused kernel also does
+the multiply in 8 bits, stays faster at every batch size. Fourth, the gains cost little quality at 8 bits and
 \MFourAbsMin--\MFourAbsMax{} MMLU points at 4 bits, more on smaller models. The best use of the saved
 memory is therefore a larger model: Qwen3-32B in 4 bits scores \BigMMLUawq\% on MMLU against
 \SmallMMLUbf\% for Qwen3-8B in BF16, with only \BigMemRatio{} the weight memory.

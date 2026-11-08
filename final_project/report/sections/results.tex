@@ -87,12 +87,13 @@ The batch-1 gains rest on decoding being memory-bound, and batching removes that
 extra request reuses the same weights, so the work per byte grows with the batch (\cref{eq:intensity}).
 The speedup of weight-only formats therefore shrinks as the batch grows (\cref{fig:speed}b) and is gone
 near the BF16 ridge point (P2): AWQ-INT4 stops winning at $B\approx\AWQcross$ for 512-token prompts
-(\cref{fig:heatmaps}). Long prompts add compute-bound prefill to each request, so with long prompts
-the gain fades sooner. FP8 does not fade, because it also halves the compute: it stays
-\FPminEtoE--\FPmaxEtoE{} faster in every cell. The bitsandbytes formats never reach the memory-bound
-gain in the first place. LLM.int8() is slower in every cell (\INTminEtoE--\INTmaxEtoE), and NF4 wins
-only below $B\approx\NFcross$. Long answers do the reverse: they add memory-bound decode and raise
-the gain (at $B=16$, \OutAWQSixteenShort{} for 32 output tokens, \OutAWQSixteenLong{} for 512; \cref{app:speed}).
+(\cref{fig:heatmaps}). Long prompts add compute-bound prefill to each request, so the gain fades
+sooner. Long answers add memory-bound decode and raise it (at $B=16$, \OutAWQSixteenShort{} for 32
+output tokens, \OutAWQSixteenLong{} for 512; \cref{app:speed}). FP8 does not fade, because its kernel
+also does the multiply in 8 bits, on tensor cores three times faster than BF16: it stays
+\FPminEtoE--\FPmaxEtoE{} faster in every cell. LLM.int8() is W8A8 too, yet it is slower in every cell
+(\INTminEtoE--\INTmaxEtoE), and NF4 wins only below $B\approx\NFcross$. The bitsandbytes formats never
+reach the memory-bound gain in the first place; \cref{sec:mechanism} shows why.
 
 \subsection{Why: kernels, the roofline and host overhead}
 \label{sec:mechanism}
@@ -106,8 +107,8 @@ size); ticks mark where it falls below 1.05. (b)~The same kernels on the measure
 \label{fig:kernels}
 \end{figure}
 
-\answer{The roofline explains the vLLM kernels. The CPU cost of launching kernels explains the HF
-stack.}
+\answer{The roofline explains the vLLM kernels. Extra kernels, and the CPU cost of launching them,
+explain the HF stack.}
 
 \textbf{Kernels.} To test the mechanism directly, we time each kernel alone on the matrix shapes of one
 7B decoder layer (\cref{fig:kernels}a). Marlin W4A16 is \MarlinFourMone{} faster than BF16 at $M=1$,
@@ -115,6 +116,13 @@ as P1 predicts for four times fewer bytes. Its gain then shrinks and ends at $M\
 because it hits the same BF16 compute roof (\cref{fig:kernels}b). Real kernels reach that roof
 gradually, so the crossover sits above the ridge point. FP8's compute roof is about three times higher
 (\FPeightmeas{} vs.\ \BFmeas\,TFLOP/s), so FP8 is still \FPkernMmax{} faster at $M=8192$.
+
+\textbf{Why the two W8A8 formats disagree.} The number format is not the cause: the GPU multiplies
+INT8 as fast as FP8 (\INTeightmeas\,TOPS vs.\ \FPeightmeas\,TFLOP/s). LLM.int8() is slow because it
+multiplies the outlier columns of the activations separately, in 16 bits. Each multiply thus needs
+over a dozen small kernels, and the CPU waits for the GPU to find the outliers. Its layer runs at
+\INTkernMone{} of the BF16 speed at $M=1$ and at most \INTkernMmax{} at large $M$; FP8, with two
+kernels, is faster at every $M$ (\cref{fig:kernels}a).
 
 \begin{figure}[t]
 \centering
@@ -129,7 +137,8 @@ is \NFkernMone{} faster than BF16 at $M=1$, yet the whole NF4 model is only \NFs
 time must be lost outside the kernels. A profile of one decode step shows where (\cref{fig:profile}).
 With BF16 the GPU is busy \BusyBFone\% of the step, with NF4 only \BusyNFone\%, and with LLM.int8(),
 which launches \KernIntRatio{} as many kernels, only \BusyIntone\%. For the rest of the step the GPU
-waits for Python to launch the next kernel. More layers mean more launches, so this overhead grows
+waits for Python to launch the next kernel. LLM.int8()'s INT8 multiplies do take half the time of
+BF16's (\GemmIntone{} vs.\ \GemmBFone\,ms per step), but the kernels around them lose this gain. More layers mean more launches, so this overhead grows
 with depth; this is why NF4 is slower than BF16 on the 36-layer 3B model. vLLM avoids most of it with
 CUDA graphs, which replay a decode step with very few launches.
 

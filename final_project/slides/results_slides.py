@@ -64,9 +64,14 @@ def slide_overview(prs, fig_dir):
                         "Qwen2.5-7B, each config vs. BF16 on the same stack \u2014 blue: better, red: worse",
                         notes=("Read the columns from left to right; each limits the next. Memory: every format saves "
                                "memory, but 4-bit weights save only 2.6 to 2.7x, not 4x. Speed: the saved bytes become "
-                               "decode speed on vLLM (blue) but not on HF, and only FP8, which also quantizes the "
-                               "activations, speeds up prefill and high-batch throughput. Quality: 8-bit rows are grey "
-                               "(no significant change); 4-bit rows lose 0.6 to 1.6 MMLU points on this model."))
+                               "decode speed on vLLM (blue) but not on HF, and only FP8, whose fused kernel also multiplies "
+                               "in 8 bits, speeds up prefill and high-batch throughput. Quality: 8-bit rows are grey "
+                               "(no significant change); 4-bit rows lose 0.6 to 1.6 MMLU points on this model. "
+                               "If asked why the two W8A8 rows disagree: not the number format, since the GPU multiplies "
+                               "INT8 as fast as FP8 (650 TOPS vs. 645 TFLOP/s). LLM.int8() multiplies the outlier "
+                               "columns of the activations separately in 16 bits, so each multiply needs over a dozen "
+                               "small kernels and a wait for the GPU; its INT8 multiplies are 2x faster than BF16, but "
+                               "the GPU sits idle 72% of the step. FP8 uses two kernels inside a CUDA graph."))
     fw, fh = _fit(fig, 9.0, U.BOT - U.TOP + 0.15)
     U.picture(s, fig, 0.5 + (9.0 - fw) / 2, U.TOP - 0.05, w=fw,
               alt="Heat map of the change in memory, speed and quality for six quantized configurations")

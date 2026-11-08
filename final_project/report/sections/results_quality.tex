@@ -10,8 +10,8 @@ configurations of one model size; colours and markers follow the quantization ty
 \answer{8-bit formats keep quality. 4-bit formats cost a little, most on small models. The saved
 memory is therefore best spent on a larger model.}
 
-\textbf{Noise floor.} The memory and speed gains are worth only as much as the quality they keep. To
-judge a change, we first need the noise floor. BF16 on the two stacks disagrees on
+\textbf{Noise floor.} The gains above matter only if quality holds, so we first measure the noise
+floor. BF16 on the two stacks disagrees on
 \BackendFlipsSeven{} of the 7B model's GSM8K answers, because different kernels round differently, yet
 the accuracies differ by only \BackendNoiseSeven{} points (MMLU: \MBackendNoiseSeven).
 
@@ -27,8 +27,8 @@ MMLU accuracy by \MDFourMinSeven{} to \MDFourMaxSeven{} points on 7B and \MDFour
 model has less spare capacity to absorb the rounding error.
 
 \textbf{More parameters beat more bits.} This cost is smaller than the gain from a larger model, so at a
-fixed memory budget parameters are worth more than bits (\cref{fig:quality}), as the scaling laws of
-Dettmers and Zettlemoyer~\cite{dettmers2023case} predict. \QualityGuide{}
+fixed memory budget parameters are worth more than bits (\cref{fig:quality}), as scaling laws
+predict~\cite{dettmers2023case}. \QualityGuide{}
 
 \textbf{One metric is not enough.} The 14B GPTQ-INT4 checkpoint keeps its task accuracy
 (\AccGPTQFourFourteenPct\% on GSM8K), yet its WikiText-2 perplexity is \PPLGPTQFourFourteen{} instead of

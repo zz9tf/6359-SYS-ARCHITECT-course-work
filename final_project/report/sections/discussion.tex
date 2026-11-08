@@ -25,9 +25,10 @@ Only HF + bitsandbytes & Quantize for memory, not speed & LLM.int8() is \INTeigh
 \textbf{Lessons for system design.} Weight-only formats save bandwidth but not compute, so to stay
 fast at large batches the math itself must run in low precision, as FP8 does here and FP4 can on the
 newest GPUs. Even then, the speedup reaches the user only through a fused kernel and a decode loop with
-few launches, so the software stack matters as much as the format. And once the weights are in 4 bits,
-the KV cache is the largest 16-bit user of memory, which makes KV-cache
-quantization~\cite{liu2024kivi,hooper2024kvquant} the next step.
+few launches: LLM.int8() also multiplies in 8 bits, yet it is slower than BF16 everywhere. The software
+stack therefore matters as much as the format. Once the weights are in 4 bits, the KV cache is the
+largest 16-bit user of memory, so KV-cache quantization~\cite{liu2024kivi,hooper2024kvquant} is the
+next step.
 
 \input{sections/limitations}
 
@@ -37,8 +38,8 @@ Quantization changes memory, speed and quality, and on one consumer GPU each cha
 4-bit weights save only \WtNFSeven--\WtAWQSeven, and less at run time, because the embedding, the KV
 cache and the activations stay in 16 bits. The saved bytes become speed only while decoding is
 memory-bound and a fused kernel hides the dequantization (\AWQspeedup{} on vLLM, \NFsevenB{} with
-bitsandbytes). Batching ends that regime near batch size \AWQcross; after it, only FP8, which also
-halves the compute, stays faster. The quality cost is small at 8 bits and \MFourAbsMin--\MFourAbsMax{}
+bitsandbytes). Batching ends that regime near batch size \AWQcross; after it, only FP8, whose fused
+kernel also multiplies in 8 bits, stays faster. The quality cost is small at 8 bits and \MFourAbsMin--\MFourAbsMax{}
 MMLU points at 4 bits, less than the gain from a larger model. Quantization therefore pays off most as
 a way to run a larger model: smaller is not always faster, but it can be both smaller and better.
 

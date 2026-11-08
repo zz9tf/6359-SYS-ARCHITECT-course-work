@@ -19,9 +19,9 @@ The one change confirms the host-overhead explanation: with more layers, NF4 fal
 \FamRNFone{} of the BF16 speed. Quality, in contrast, depends on the weights rather than on the
 kernels. \FamQualitySentence
 
-\textbf{Qwen3-32B.} The last step of the chain, spending memory on parameters, matters most when a
-model would not fit otherwise. Qwen3-32B needs \BigBFw\,GB in BF16 and about half of that in 8 bits,
-more than the GPU's 32\,GB, so on this GPU it runs only in 4 bits (AWQ-INT4: \BigAWQw\,GB plus
+\textbf{Qwen3-32B.} Spending memory on parameters matters most when a model would not fit
+otherwise. Qwen3-32B needs \BigBFw\,GB in BF16 and about half of that in 8 bits, more than the GPU's
+32\,GB, so it runs here only in 4 bits (AWQ-INT4: \BigAWQw\,GB plus
 \BigAWQkv{} cached tokens). Compared with Qwen3-8B in BF16 (\SmallBFw\,GB), it costs \BigAWQtpot{} vs.\
 \SmallBFtpot\,ms per token, but it scores \BigGSMawq\% vs.\ \SmallGSMbf\% on GSM8K (\BigGAWQp) and
 \BigMMLUawq\% vs.\ \SmallMMLUbf\% on MMLU (\BigMAWQp; \cref{fig:general}c). \BigVerdict{}

@@ -25,11 +25,17 @@ The figure reads from left to right, and each finding limits the next one.
    do not: NF4 is only 1.13× faster, and LLM.int8() is **3.4× slower**.
 3. **Large batches: the gain lasts only while decoding is memory-bound.** Batching makes decoding
    compute-bound, so weight-only gains fade and vanish near **B ≈ 175** (AWQ-INT4, 512-token prompts).
-   Only **FP8 W8A8**, which also halves the compute, stays faster in every cell (1.59×–1.80×) and
-   gives **1.73×** the BF16 throughput at B = 256.
+   Only **FP8 W8A8**, whose fused kernel also multiplies in 8 bits, stays faster in every cell
+   (1.59×–1.80×) and gives **1.73×** the BF16 throughput at B = 256. LLM.int8() is W8A8
+   too, yet it is slower in every cell (0.27×–0.71×); finding 4 explains why.
 4. **Why: the roofline and the host.** Marlin W4A16 is 3.2× faster than cuBLAS at M = 1 and loses its
    gain at M ≈ 333, where it hits the same BF16 compute roof. On HF, kernel launches on the CPU
    dominate: the GPU is busy only 28% of an LLM.int8() decode step (BF16: 97%).
+   The two W8A8 formats differ because of their kernels, not their number format. The GPU multiplies INT8
+   as fast as FP8 (650 TOPS vs. 645 TFLOP/s), but LLM.int8() multiplies the outlier
+   columns of the activations separately, in 16 bits. Each multiply then needs over a dozen small kernels
+   (3.7× as many per step as BF16) and a wait for the GPU, so its layer runs at only
+   0.49× of the BF16 speed at M = 1. FP8 needs two kernels and is faster at every M.
 5. **Quality: small cost at 8 bits, moderate at 4 bits.** GPTQ-INT8 and FP8 stay within 0.9 points of BF16
    on GSM8K and MMLU. 4-bit formats cost 0.6–2.8 MMLU points, most on the 3B model, where GSM8K
    drops as well ($-3.8$ to $-3.1$ points).

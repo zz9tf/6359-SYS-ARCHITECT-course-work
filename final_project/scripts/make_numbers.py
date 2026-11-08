@@ -54,6 +54,7 @@ def main():
     put("BFmeas", bf, "{:.0f}")
     put("RidgeBF", bf / bw if ok(bw) else float("nan"), "{:.0f}")
     put("FPeightmeas", peaks.get("fp8_gemm_tflops", float("nan")), "{:.0f}")
+    put("INTeightmeas", peaks.get("int8_gemm_tops", float("nan")), "{:.0f}")
     runs = pd.concat([d[d.status == "ok"] for d in (A.raw("hf_sweep.jsonl"), A.raw("vllm_sweep.jsonl")) if not d.empty])
     put("NumMeasurements", f"{len(runs):,}".replace(",", "{,}"))
     cv = runs.groupby(A.KEYS).e2e_s.agg(lambda s: s.std() / s.mean() * 100).dropna()
@@ -243,6 +244,8 @@ def main():
     putx("NFkernMmax", kern("bnb-nf4", fn=lambda r: float(r[r.m >= 16].speedup.min())), 2)
     lo, hi = kern("bnb-int8", fn=lambda r: float(r.speedup.min())), kern("bnb-int8", fn=lambda r: float(r.speedup.max()))
     put("INTkernRange", f"{lo:.2f}--{hi:.2f}$\\times$" if ok(lo) else "n/a")
+    putx("INTkernMone", kern("bnb-int8", 1), 2)
+    putx("INTkernMmax", kern("bnb-int8", fn=lambda r: float(r.speedup.max())), 2)
 
     # profile
     prof = A.profiles()
@@ -259,8 +262,17 @@ def main():
         put("BusyIntone", pv("int8", 1, "gpu_busy_frac") * 100, "{:.0f}")
         put("BusyNFone", pv("nf4", 1, "gpu_busy_frac") * 100, "{:.0f}")
         putx("KernIntRatio", pv("int8", 1, "kernels_per_step") / pv("bf16", 1, "kernels_per_step"), 1)
+
+        def cat(prec, B, name):  # GPU time of one kernel category per decode step (ms)
+            try:
+                return float(p7.loc[(prec, B)]["categories_ms"].get(name, float("nan")))
+            except KeyError:
+                return float("nan")
+
+        put("GemmIntone", cat("int8", 1, "INT8 GEMM"), "{:.1f}")
+        put("GemmBFone", cat("bf16", 1, "BF16/FP16 GEMM"), "{:.1f}")
     else:
-        for k in ("BusyBFone", "BusyIntone", "BusyNFone", "KernIntRatio"):
+        for k in ("BusyBFone", "BusyIntone", "BusyNFone", "KernIntRatio", "GemmIntone", "GemmBFone"):
             put(k, "n/a")
 
     # energy
@@ -673,8 +685,7 @@ def main():
         if tg and tm:
             both = tg["delta_pp"] > 0 and tm["delta_pp"] > 0 and tg["p_value"] < 0.05 and tm["p_value"] < 0.05
             put("BigVerdict", (f"A model four times larger, using only {w32 / h8:.2f}$\\times$ the weight memory, is "
-                               "significantly better on both benchmarks. On this GPU, that model can run only because of "
-                               "quantization.")
+                               "significantly better on both benchmarks.")
                 if both else "The larger 4-bit model is not uniformly better, so the choice must be checked per task.")
 
     def tex_safe(v):
