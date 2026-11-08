@@ -11,12 +11,12 @@ beats Qwen3-8B in BF16.}
 not, so it must be measured for each model.}
 
 \textbf{Qwen3-8B.} If the speed effects come from the hardware and the kernels, they should not depend
-on the model. Qwen3-8B tests this with a different shape: \FamRLayers{} layers and \FamRKVheads{} KV
-heads, against \FamQLayers{} and \FamQKVheads{} for Qwen2.5-7B. The systems effects carry over
+on the model. Qwen3-8B, a newer model of about the same size, tests this. The systems effects carry over
 (\cref{fig:general}a, \cref{app:general}): at batch size~1, AWQ-INT4 decodes \FamRAWQone{} faster than
 BF16 (Qwen2.5-7B: \FamQAWQone), FP8 \FamRFPone, and LLM.int8() runs at \FamRINTone{} of the BF16 speed.
-The one change confirms the host-overhead explanation: with more layers, NF4 falls from \FamQNFone{} to
-\FamRNFone{} of the BF16 speed. Quality, in contrast, depends on the weights rather than on the
+The one change is NF4, whose gain rests on host time (\cref{sec:mechanism}): it falls from \FamQNFone{}
+to \FamRNFone{} of the BF16 speed, saving \NFsaveR\,ms of weight reading per token but spending
+\NFextraR\,ms more on the rest. Quality, in contrast, depends on the weights rather than on the
 kernels. \FamQualitySentence
 
 \textbf{Qwen3-32B.} Spending memory on parameters matters most when a model would not fit

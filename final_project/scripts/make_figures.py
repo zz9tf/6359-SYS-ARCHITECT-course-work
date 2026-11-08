@@ -916,70 +916,34 @@ def fig_generalization():
     save(fig, "general_qwen3")
 
 
-def fig_general_nf4():
-    """Slides: the one speed trend that changes on Qwen3-8B (NF4 turns slower than BF16), and why:
-    on HF, NF4's time per token follows the number of decoder layers, not the model size."""
-    fq, fr = A.family_pair("7b", "q3-8b")
-    if not fr:
+def fig_general_bits():
+    """Slides: does the trend generalize? Each model against its own BF16 on vLLM (same stack, same
+    workload), going from 16- to 8- to 4-bit weights: speed, throughput and accuracy."""
+    t = A.bits_trend()
+    if t.empty:
         return
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=fsz((6.6, 2.0), (11.0, 3.6)))
-    fsl = 5.6 * FS / 0.8
-    # (a) slope chart: only NF4 changes trend, so it is drawn bold; the others are faded
-    cfg = [("awq-int4", "vllm", "AWQ-INT4"), ("fp8", "vllm", "FP8"), ("nf4", "hf", "NF4"), ("int8", "hf", "LLM.int8()")]
-    ax1.axhline(1, color=S.INK2, lw=0.8, ls=":", zorder=1)
-    for c, b, name in cfg:
-        v0, v1 = fq.get(f"tpot_b1_{c}", np.nan), fr.get(f"tpot_b1_{c}", np.nan)
-        if np.isnan(v0) or np.isnan(v1):
-            continue
-        st, strong = S.style(b, c), c == "nf4"
-        ax1.plot([0, 1], [v0, v1], color=st["color"], ls=st["linestyle"], lw=1.8 if strong else 0.8,
-                 alpha=1.0 if strong else 0.35, marker=st["marker"], ms=4.2 if strong else 3.2,
-                 markerfacecolor=st["markerfacecolor"], markeredgecolor=st["markeredgecolor"], zorder=3 if strong else 2)
-        kw = dict(textcoords="offset points", va="center", fontsize=fsl, color=st["color"] if strong else S.MUTED,
-                  fontweight="bold" if strong else "normal")
-        ax1.annotate(f"{v0:.2f}\u00d7", (0, v0), xytext=(-5, 0), ha="right", **kw)
-        ax1.annotate(f"{name} {v1:.2f}\u00d7", (1, v1), xytext=(5, 0), ha="left", **kw)
-    ax1.text(1.98, 1.04, "BF16 speed", fontsize=fsl * 0.9, color=S.MUTED, ha="right", va="bottom")
-    ax1.set_yscale("log", base=2)
-    ax1.set_yticks([0.25, 0.5, 1, 2])
-    ax1.set_yticklabels(["0.25\u00d7", "0.5\u00d7", "1\u00d7", "2\u00d7"])
-    ax1.set_ylim(0.2, 3.2)
-    ax1.set_xticks([0, 1])
-    ax1.set_xticklabels([f"Qwen2.5-7B\n{configs.LAYERS['7b']} layers", f"Qwen3-8B\n{configs.LAYERS['q3-8b']} layers"])
-    ax1.set_xlim(-0.5, 2.0)
-    ax1.set_ylabel("decode speedup over BF16")
-    ax1.set_title("(a) Only NF4 changes: faster \u2192 slower")
-    ax1.grid(axis="x", visible=False)
-    # (b) why: NF4 (HF) time per token against the number of decoder layers, every model we ran
-    agg, _ = A.sweeps()
-    g = agg[(agg.backend == "hf") & (agg.batch == 1) & (agg.input_len == 512) & (agg.output_len == 128)
-            & (agg.tag == "grid") & (agg.precision == "nf4")]
-    pts = [(configs.LAYERS[r["size"]], r.tpot * 1e3, configs.MODEL_LABEL[r["size"]]) for _, r in g.iterrows()
-           if r["size"] in configs.LAYERS]
-    if pts:
-        L_, t_ = np.array([q[0] for q in pts], float), np.array([q[1] for q in pts])
-        k = float((L_ * t_).sum() / (L_ * L_).sum())          # least-squares line through the origin
-        ax2.plot([0, 70], [0, 70 * k], color=S.MUTED, lw=0.9, ls="--", zorder=1)
-        ax2.text(2, 29.5, f"dashed line: {k:.2f} ms \u00d7 layers", ha="left", va="top", fontsize=fsl, color=S.INK2)
-        st = S.style("hf", "nf4")
-        off = {"Qwen2.5-3B": (6, 0, "left"), "Qwen2.5-7B": (6, -4, "left"), "Qwen3-8B": (-6, 4, "right"),
-               "Qwen2.5-14B": (6, -5, "left"), "Qwen3-32B": (-6, 3, "right")}
-        for L0, t0, lab in pts:
-            strong = lab in ("Qwen2.5-3B", "Qwen2.5-7B")
-            ax2.plot(L0, t0, marker=st["marker"], ms=4.6 if strong else 3.8, color=st["color"], markerfacecolor="white",
-                     markeredgewidth=1.4 if strong else 0.9, ls="none", zorder=3)
-            dx, dy, ha = off.get(lab, (6, 0, "left"))
-            ax2.annotate(f"{lab}: {t0:.1f} ms", (L0, t0), xytext=(dx, dy), textcoords="offset points", ha=ha,
-                         va="center", fontsize=fsl, color=S.INK if strong else S.INK2,
-                         fontweight="bold" if strong else "normal")
-        ax2.set_xlim(0, 72)
-        ax2.set_ylim(0, 30)
-    ax2.set_xlabel("decoder layers")
-    ax2.set_ylabel("NF4 (HF) time per token (ms)")
-    ax2.set_title("(b) Why: NF4 time follows the layer count")
-    ax2.grid(axis="x", visible=False)
+    models = [("3b", "Qwen2.5-3B", "#8a6fd1", "o"), ("7b", "Qwen2.5-7B", S.INK2, "s"), ("q3-8b", "Qwen3-8B", S.BLUE, "D")]
+    fig, axes = plt.subplots(1, 3, figsize=fsz((6.6, 2.0), (12.0, 3.6)))
+    panels = [("speed", "(a) Speed: decode, B = 1", "\u00d7 BF16 of the same model", 1.0),
+              ("thr", "(b) Throughput: B = 64", "\u00d7 BF16 of the same model", 1.0),
+              ("dacc", "(c) Accuracy: MMLU", "change vs. BF16 (points)", 0.0)]
+    for ax, (col, title, yl, ref) in zip(axes, panels):
+        ax.axhline(ref, color=S.INK2, lw=0.8, ls=":", zorder=1)
+        for size, lab, c, mk in models:
+            g = t[t["size"] == size].sort_values("bits", ascending=False)
+            ax.plot(range(len(g)), g[col], color=c, marker=mk, lw=1.4, ms=4.0, label=lab, zorder=3)
+        ax.set_xticks(range(3))
+        ax.set_xticklabels(["16-bit\nBF16", "8-bit\nFP8", "4-bit\nAWQ"], linespacing=0.95)
+        ax.set_xlim(-0.3, 2.3)
+        ax.set_title(title)
+        ax.set_ylabel(yl)
+        ax.grid(axis="x", visible=False)
+    axes[0].set_ylim(0.8, 2.7)
+    axes[1].set_ylim(0.8, 2.0)
+    axes[2].set_ylim(-2.8, 0.6)
+    axes[0].legend(loc="upper left", frameon=False, fontsize=5.6 * FS / 0.8, handlelength=1.6)
     fig.tight_layout()
-    save(fig, "general_nf4")
+    save(fig, "general_bits")
 
 
 # ----------------------------------------------------------------------------- Q4 quality

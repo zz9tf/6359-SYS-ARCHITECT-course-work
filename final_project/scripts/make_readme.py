@@ -64,7 +64,7 @@ The figure reads from left to right, and each finding limits the next one.
    in BF16, and Qwen3-32B, which fits this GPU only in 4 bits ({m.get('BigAWQw', '?')} GB), scores
    **{m.get('BigGSMawq', '?')}% / {m.get('BigMMLUawq', '?')}%** on GSM8K / MMLU against {m.get('SmallGSMbf', '?')}% / {m.get('SmallMMLUbf', '?')}% for Qwen3-8B in BF16 ({m.get('SmallBFw', '?')} GB).
 7. **The systems effects generalize; the quality order does not.** On Qwen3-8B, AWQ-INT4 decodes
-   {m.get('FamRAWQone', '?')} faster (Qwen2.5-7B: {m.get('FamQAWQone', '?')}), and NF4 falls to {m.get('FamRNFone', '?')} on the 36-layer model (host-bound).
+   {m.get('FamRAWQone', '?')} faster (Qwen2.5-7B: {m.get('FamQAWQone', '?')}), and NF4 falls to {m.get('FamRNFone', '?')}: it saves {m.get('NFsaveR', '?')} ms of weight reading per token but spends {m.get('NFextraR', '?')} ms more on the rest.
    But there FP8 costs as much MMLU as AWQ-INT4, so quality must be checked per model, and with more than
    one metric: the 14B GPTQ-INT4 checkpoint keeps its task scores but has a perplexity of {m.get('PPLGPTQFourFourteen', '?')}.
 """

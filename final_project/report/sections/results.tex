@@ -138,8 +138,8 @@ time must be lost outside the kernels. A profile of one decode step shows where 
 With BF16 the GPU is busy \BusyBFone\% of the step, with NF4 only \BusyNFone\%, and with LLM.int8(),
 which launches \KernIntRatio{} as many kernels, only \BusyIntone\%. For the rest of the step the GPU
 waits for Python to launch the next kernel. LLM.int8()'s INT8 multiplies do take half the time of
-BF16's (\GemmIntone{} vs.\ \GemmBFone\,ms per step), but the kernels around them lose this gain. More layers mean more launches, so this overhead grows
-with depth; this is why NF4 is slower than BF16 on the 36-layer 3B model. vLLM avoids most of it with
+BF16's (\GemmIntone{} vs.\ \GemmBFone\,ms per step), but the kernels around them lose this gain. NF4's small gain therefore rests on host time, not on bytes,
+and on the 3B model it turns into a loss (\cref{app:speed}). vLLM avoids most of it with
 CUDA graphs, which replay a decode step with very few launches.
 
 \subsection{Do the results hold for real traffic?}

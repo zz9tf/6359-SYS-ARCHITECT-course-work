@@ -319,36 +319,30 @@ def quality_facts():
 
 
 def slide_general(prs, fig_dir):
-    """Generalization, told through the one trend that changes on Qwen3-8B: NF4 turns slower than BF16."""
-    fig = fig_dir / "general_nf4.png"
+    """Generalization: the same bit-width trends on every model (each vs. its own BF16 on vLLM)."""
+    fig = fig_dir / "general_bits.png"
     m = macros()
-    if not fig.exists() or "FamRNFone" not in m or "NFmsPerLayer" not in m:
+    if not fig.exists() or "GenSpeedFour" not in m:
         return
-    s = U.content_slide(prs, "Does It Generalize? One Trend Changes: NF4",
-                        "On HF, NF4's time per token is set by the number of layers, not by the model size",
-                        notes=("Generalization here means: do our findings still hold on a different model? We repeated "
-                               "the runs on Qwen3-8B, which is about the same size as Qwen2.5-7B but has "
-                               f"{m['FamRLayers']} layers instead of {m['FamQLayers']}. Left: AWQ, FP8 and LLM.int8() keep "
-                               f"their speedups within a few percent. Only NF4 changes direction: {m['FamQNFone']} faster "
-                               f"than BF16 on Qwen2.5-7B, but {m['FamRNFone']}, i.e. slower, on Qwen3-8B. Right: why. On "
-                               "HF the CPU launches every kernel from Python, and NF4 adds a dequantization kernel to "
-                               "every linear layer. At batch 1 the GPU finishes each kernel quickly and then waits for the "
-                               f"CPU, so each layer costs a fixed time of about {m['NFmsPerLayer']} ms, whatever its size. "
-                               "NF4 time per token therefore follows the layer count: the small Qwen2.5-3B, with 36 layers, "
-                               f"takes {m['NFtpotThree']} ms per token, more than the 7B model with 28 layers "
-                               f"({m['NFtpotSeven']} ms). BF16 time instead follows the bytes read, and Qwen3-8B has only "
-                               "8% more bytes but 29% more layers, so NF4 falls behind BF16. This confirms the host-overhead "
-                               "explanation on a new model. If asked about Qwen3-32B: it fits this GPU only in 4 bits, "
-                               f"and scores {m.get('BigMMLUawq', '?')}% on MMLU vs {m.get('SmallMMLUbf', '?')}% for Qwen3-8B "
-                               "in BF16 (report Section 4.7)."))
-    tiles = [(f"{m['FamQNFone']} \u2192 {m['FamRNFone']}", "NF4 vs BF16: Qwen2.5 \u2192 Qwen3",
-              "the only speedup that changes direction"),
-             (f"{m['NFmsPerLayer']} ms / layer", "NF4 time per token on every model",
-              "fixed CPU launch cost per layer"),
-             (f"{m['NFtpotThree']} > {m['NFtpotSeven']} ms", "3B (36 layers) vs 7B (28 layers)",
-              "a smaller model, but more layers")]
-    figure_with_tiles_below(s, fig, tiles, alt="NF4 decode speedup flips below BF16 on Qwen3-8B; NF4 time per token "
-                                               "grows linearly with the number of layers")
+    s = U.content_slide(prs, "Does It Generalize? Same Trends",
+                        "vLLM, each model vs. its own BF16: fewer bits move speed, throughput and accuracy the same way",
+                        notes=("Generalization means: do the findings hold on other models? To keep it a fair test we "
+                               "change one thing at a time: same GPU, same stack (vLLM), same workload, and each model is "
+                               "compared only with its own BF16 version. Only the bit-width changes: 16-bit BF16, 8-bit "
+                               "FP8, 4-bit AWQ. Three models, from two families: Qwen2.5-3B, Qwen2.5-7B and Qwen3-8B. "
+                               f"Speed (decode, batch 1): every model gets faster with fewer bits, {m['GenSpeedEight']} at "
+                               f"8 bits and {m['GenSpeedFour']} at 4 bits. Throughput (batch 64): every model peaks at "
+                               f"8 bits, {m['GenThrEight']}, because FP8 also speeds up the math; 4-bit falls back to "
+                               f"{m['GenThrFour']} because the batch makes decoding compute-bound. Accuracy (MMLU): no "
+                               f"model gains; 8 bits cost {m['GenAccEight']} points and 4 bits {m['GenAccFour']}. The "
+                               "lines have the same shape for all three models, so the trends are not specific to one "
+                               "model. The sizes differ a little: the smallest model gains least in speed and loses "
+                               "most at 4 bits."))
+    tiles = [(m["GenSpeedFour"], "Speed at 4 bits, all models", "decode, batch 1, vs. own BF16"),
+             (m["GenThrEight"], "Throughput at 8 bits (the peak)", f"4-bit only {m['GenThrFour']}"),
+             (m["GenAccFour"], "MMLU points at 4 bits", f"8-bit: {m['GenAccEight']}")]
+    figure_with_tiles_below(s, fig, tiles, alt="Speed, throughput and MMLU change against bit-width for Qwen2.5-3B, "
+                                               "Qwen2.5-7B and Qwen3-8B; the three lines have the same shape")
 
 
 def slide_takeaways(prs, f):

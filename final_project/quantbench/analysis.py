@@ -393,3 +393,32 @@ def effect_matrix(size="7b", L_ttft=2048, L=512, B_thr=64, peak_cell=(32, 2048),
             row[key + "_sig"] = bool(t and n_tests[bench] and t["p_value"] < 0.05 / n_tests[bench])
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+# --------------------------------------------------------------------------- bit-width trend per model
+TREND_SIZES = ("3b", "7b", "q3-8b")           # models with BF16, FP8 and AWQ-INT4 on vLLM
+TREND_PRECS = (("bf16", 16), ("fp8", 8), ("awq-int4", 4))
+
+
+def bits_trend(L=512, B_thr=64):
+    """Each model against its own vLLM BF16 (same stack, same workload): decode speed at B=1,
+    throughput at B=B_thr (output tokens/s) and MMLU accuracy, for 16-, 8- and 4-bit weights."""
+    agg, _ = sweeps()
+    g = agg[(agg.backend == "vllm") & (agg.input_len == L) & (agg.output_len == 128) & (agg.tag == "grid")]
+    mm = mmlu()
+    mm = mm[mm.backend == "vllm"] if not mm.empty else mm
+    rows = []
+    for size in TREND_SIZES:
+        def cell(prec, B, col):
+            r = g[(g["size"] == size) & (g.precision == prec) & (g.batch == B)]
+            return float(r[col].iloc[0]) if len(r) else float("nan")
+
+        def acc(prec):
+            r = mm[(mm["size"] == size) & (mm.precision == prec)] if not mm.empty else mm
+            return float(r.accuracy.iloc[-1]) * 100 if len(r) else float("nan")
+        for prec, bits in TREND_PRECS:
+            rows.append(dict(size=size, precision=prec, bits=bits,
+                             speed=cell("bf16", 1, "tpot") / cell(prec, 1, "tpot"),
+                             thr=cell(prec, B_thr, "out_tok_s") / cell("bf16", B_thr, "out_tok_s"),
+                             dacc=acc(prec) - acc("bf16")))
+    return pd.DataFrame(rows)

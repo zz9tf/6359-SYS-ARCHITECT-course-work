@@ -43,7 +43,7 @@ The figure reads from left to right, and each finding limits the next one.
    in BF16, and Qwen3-32B, which fits this GPU only in 4 bits (19.6 GB), scores
    **94.2% / 78.1%** on GSM8K / MMLU against 91.4% / 69.6% for Qwen3-8B in BF16 (16.4 GB).
 7. **The systems effects generalize; the quality order does not.** On Qwen3-8B, AWQ-INT4 decodes
-   2.33× faster (Qwen2.5-7B: 2.44×), and NF4 falls to 0.90× on the 36-layer model (host-bound).
+   2.33× faster (Qwen2.5-7B: 2.44×), and NF4 falls to 0.90×: it saves 6.2 ms of weight reading per token but spends 7.6 ms more on the rest.
    But there FP8 costs as much MMLU as AWQ-INT4, so quality must be checked per model, and with more than
    one metric: the 14B GPTQ-INT4 checkpoint keeps its task scores but has a perplexity of 37.5.
 <!-- /KEY-FINDINGS -->

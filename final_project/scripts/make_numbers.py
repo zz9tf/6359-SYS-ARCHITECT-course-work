@@ -14,7 +14,6 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from quantbench import analysis as A  # noqa: E402
-from quantbench import configs  # noqa: E402
 from quantbench import memory as M  # noqa: E402
 from quantbench.results import ROOT  # noqa: E402
 
@@ -44,14 +43,39 @@ def main():
     peaks = A.hw_peaks()
     grid = sp[(sp.tag == "grid") & (sp.output_len == 128)]
 
-    # NF4 on HF: time per token follows the number of decoder layers, not the model size
-    nf = agg[(agg.backend == "hf") & (agg.precision == "nf4") & (agg.batch == 1) & (agg.input_len == 512)
-             & (agg.output_len == 128) & (agg.tag == "grid") & agg["size"].isin(list(configs.LAYERS))]
-    if len(nf):
-        Ls = nf["size"].map(configs.LAYERS).astype(float)
-        put("NFmsPerLayer", float((Ls * nf.tpot * 1e3).sum() / (Ls * Ls).sum()), "{:.2f}")
-        for size, name in (("3b", "NFtpotThree"), ("7b", "NFtpotSeven")):
-            put(name, first(nf[nf["size"] == size], "tpot") * 1e3, "{:.1f}")
+    # NF4 vs BF16 on HF, B=1, each model against its own floor (weight bytes / measured bandwidth):
+    # how much weight-reading time NF4 saves, and how much more time it spends on everything else
+    def nf_account(size):
+        bw_ = peaks.get("dram_read_gbps", float("nan")) * 1e9
+        out = {}
+        for prec in ("bf16", "nf4"):
+            w = hf_load[(hf_load["size"] == size) & (hf_load.precision == prec)].weights_bytes
+            t = agg[(agg.backend == "hf") & (agg["size"] == size) & (agg.precision == prec) & (agg.batch == 1)
+                    & (agg.input_len == 512) & (agg.output_len == 128) & (agg.tag == "grid")].tpot
+            if not len(w) or not len(t):
+                return None
+            out[prec] = (w.iloc[0] / bw_ * 1e3, t.iloc[0] * 1e3)        # (floor ms, measured ms)
+        save = out["bf16"][0] - out["nf4"][0]
+        extra = (out["nf4"][1] - out["nf4"][0]) - (out["bf16"][1] - out["bf16"][0])
+        return save, extra, out
+    # bit-width trend on vLLM, each model vs. its own BF16 (Qwen2.5-3B, Qwen2.5-7B, Qwen3-8B)
+    tr = A.bits_trend()
+    if not tr.empty:
+        def rng(prec, col, fmt):
+            v = tr[tr.precision == prec][col].dropna()
+            return (fmt.format(v.min()) + "--" + fmt.format(v.max())) if len(v) else "n/a"
+        put("GenSpeedEight", rng("fp8", "speed", "{:.2f}") + "$\\times$")
+        put("GenSpeedFour", rng("awq-int4", "speed", "{:.2f}") + "$\\times$")
+        put("GenThrEight", rng("fp8", "thr", "{:.2f}") + "$\\times$")
+        put("GenThrFour", rng("awq-int4", "thr", "{:.2f}") + "$\\times$")
+        _v = tr[tr.precision == "fp8"].dacc.dropna()
+        put("GenAccEight", " to ".join(f"{x:.1f}".replace("-", "$-$") for x in (_v.min(), _v.max())) if len(_v) else "n/a")
+        _v = tr[tr.precision == "awq-int4"].dacc.dropna()
+        put("GenAccFour", " to ".join(f"{x:.1f}".replace("-", "$-$") for x in (_v.min(), _v.max())) if len(_v) else "n/a")
+    for size, tag in (("7b", "Q"), ("q3-8b", "R")):
+        acc = nf_account(size)
+        put(f"NFsave{tag}", acc[0] if acc else float("nan"), "{:.1f}")
+        put(f"NFextra{tag}", acc[1] if acc else float("nan"), "{:.1f}")
 
     def cell(backend, size, prec, B, L, col):
         return first(grid[(grid.backend == backend) & (grid["size"] == size) & (grid.precision == prec)

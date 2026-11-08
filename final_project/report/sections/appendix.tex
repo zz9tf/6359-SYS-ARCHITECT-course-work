@@ -76,8 +76,7 @@ prompts). Longer answers raise the share of decode, and with it the gain of weig
 for the 3B model. On vLLM the picture is the same as for 7B. On HF the smaller model is worse off. Its
 BF16 step is already limited by the host (\TPOTbfHFThree\,ms per step against a memory floor of
 \FloorThree\,ms), so fewer bytes cannot help: NF4 never beats BF16, and LLM.int8() falls to
-\IntThreeWorst{} of the BF16 speed, because the 36-layer model launches more kernels per step than
-the 28-layer 7B model.
+\IntThreeWorst{} of the BF16 speed.
 
 \begin{figure}[htbp]
 \centering
