@@ -18,6 +18,9 @@ BASE = {
     "q3-32b": "Qwen/Qwen3-32B",
 }
 
+# decoder layers per model (from each model's config.json); on HF the host cost of a decode step grows with it
+LAYERS = {"3b": 36, "7b": 28, "14b": 48, "q3-8b": 36, "q3-32b": 64}
+
 MODEL_LABEL = {"3b": "Qwen2.5-3B", "7b": "Qwen2.5-7B", "14b": "Qwen2.5-14B", "q3-8b": "Qwen3-8B", "q3-32b": "Qwen3-32B"}
 
 # pre-quantized checkpoints published for each model (Qwen3-8B has no official GPTQ release)

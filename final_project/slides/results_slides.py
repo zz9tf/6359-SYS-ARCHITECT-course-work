@@ -319,24 +319,36 @@ def quality_facts():
 
 
 def slide_general(prs, fig_dir):
-    fig = fig_dir / "general_qwen3.png"
+    """Generalization, told through the one trend that changes on Qwen3-8B: NF4 turns slower than BF16."""
+    fig = fig_dir / "general_nf4.png"
     m = macros()
-    if not fig.exists() or "FamRAWQone" not in m:
+    if not fig.exists() or "FamRNFone" not in m or "NFmsPerLayer" not in m:
         return
-    s = U.content_slide(prs, "Does It Generalize? Qwen3-8B and 32B",
-                        "Qwen3-8B reproduces the systems picture; Qwen3-32B runs on this GPU only at 4 bits",
-                        notes=("Qwen3-8B reproduces the decode speedups of AWQ and FP8 and the LLM.int8() slowdown within a few "
-                               "percent. NF4 turns from a small gain into a loss because the 36-layer model is host-bound at "
-                               "batch 1, exactly like the 36-layer Qwen2.5-3B."))
-    tiles = [(f"{m['FamRAWQone']} vs {m['FamQAWQone']}", "AWQ speedup: Qwen3 vs Qwen2.5",
-              f"Qwen3-8B vs Qwen2.5-7B at B=1; FP8 {m.get('FamRFPone')} vs {m.get('FamQFPone')}"),
-             (m.get("FamRNFone", "n/a"), "NF4 on Qwen3-8B (36 layers)",
-              f"{m.get('FamRLayers')} layers \u2192 host-bound, as on Qwen2.5-3B"),
-             (f"{m.get('BigMMLUawq', '?')}% vs {m.get('SmallMMLUbf', '?')}%", "MMLU: 32B 4-bit vs 8B BF16",
-              f"{m.get('BigAWQw', '?')} vs {m.get('SmallBFw', '?')} GB; BF16 32B needs {m.get('BigBFw', '?')} GB")]
-    if "BigMMLUawq" not in m:
-        tiles[2] = (f"{m.get('FamKVratio')}", "KV-cache bytes per token vs Qwen2.5-7B", "B=256 overflows the cache in every format")
-    figure_with_tiles_below(s, fig, tiles, alt="Decode speedup and MMLU change for Qwen2.5-7B and Qwen3-8B")
+    s = U.content_slide(prs, "Does It Generalize? One Trend Changes: NF4",
+                        "On HF, NF4's time per token is set by the number of layers, not by the model size",
+                        notes=("Generalization here means: do our findings still hold on a different model? We repeated "
+                               "the runs on Qwen3-8B, which is about the same size as Qwen2.5-7B but has "
+                               f"{m['FamRLayers']} layers instead of {m['FamQLayers']}. Left: AWQ, FP8 and LLM.int8() keep "
+                               f"their speedups within a few percent. Only NF4 changes direction: {m['FamQNFone']} faster "
+                               f"than BF16 on Qwen2.5-7B, but {m['FamRNFone']}, i.e. slower, on Qwen3-8B. Right: why. On "
+                               "HF the CPU launches every kernel from Python, and NF4 adds a dequantization kernel to "
+                               "every linear layer. At batch 1 the GPU finishes each kernel quickly and then waits for the "
+                               f"CPU, so each layer costs a fixed time of about {m['NFmsPerLayer']} ms, whatever its size. "
+                               "NF4 time per token therefore follows the layer count: the small Qwen2.5-3B, with 36 layers, "
+                               f"takes {m['NFtpotThree']} ms per token, more than the 7B model with 28 layers "
+                               f"({m['NFtpotSeven']} ms). BF16 time instead follows the bytes read, and Qwen3-8B has only "
+                               "8% more bytes but 29% more layers, so NF4 falls behind BF16. This confirms the host-overhead "
+                               "explanation on a new model. If asked about Qwen3-32B: it fits this GPU only in 4 bits, "
+                               f"and scores {m.get('BigMMLUawq', '?')}% on MMLU vs {m.get('SmallMMLUbf', '?')}% for Qwen3-8B "
+                               "in BF16 (report Section 4.7)."))
+    tiles = [(f"{m['FamQNFone']} \u2192 {m['FamRNFone']}", "NF4 vs BF16: Qwen2.5 \u2192 Qwen3",
+              "the only speedup that changes direction"),
+             (f"{m['NFmsPerLayer']} ms / layer", "NF4 time per token on every model",
+              "fixed CPU launch cost per layer"),
+             (f"{m['NFtpotThree']} > {m['NFtpotSeven']} ms", "3B (36 layers) vs 7B (28 layers)",
+              "a smaller model, but more layers")]
+    figure_with_tiles_below(s, fig, tiles, alt="NF4 decode speedup flips below BF16 on Qwen3-8B; NF4 time per token "
+                                               "grows linearly with the number of layers")
 
 
 def slide_takeaways(prs, f):

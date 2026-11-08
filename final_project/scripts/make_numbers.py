@@ -14,6 +14,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from quantbench import analysis as A  # noqa: E402
+from quantbench import configs  # noqa: E402
 from quantbench import memory as M  # noqa: E402
 from quantbench.results import ROOT  # noqa: E402
 
@@ -42,6 +43,15 @@ def main():
     hf_load, vl_load = A.loads()
     peaks = A.hw_peaks()
     grid = sp[(sp.tag == "grid") & (sp.output_len == 128)]
+
+    # NF4 on HF: time per token follows the number of decoder layers, not the model size
+    nf = agg[(agg.backend == "hf") & (agg.precision == "nf4") & (agg.batch == 1) & (agg.input_len == 512)
+             & (agg.output_len == 128) & (agg.tag == "grid") & agg["size"].isin(list(configs.LAYERS))]
+    if len(nf):
+        Ls = nf["size"].map(configs.LAYERS).astype(float)
+        put("NFmsPerLayer", float((Ls * nf.tpot * 1e3).sum() / (Ls * Ls).sum()), "{:.2f}")
+        for size, name in (("3b", "NFtpotThree"), ("7b", "NFtpotSeven")):
+            put(name, first(nf[nf["size"] == size], "tpot") * 1e3, "{:.1f}")
 
     def cell(backend, size, prec, B, L, col):
         return first(grid[(grid.backend == backend) & (grid["size"] == size) & (grid.precision == prec)

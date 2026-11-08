@@ -15,6 +15,7 @@ from matplotlib.patches import Patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from quantbench import analysis as A  # noqa: E402
+from quantbench import configs  # noqa: E402
 from quantbench import memory as M  # noqa: E402
 from quantbench import plotstyle as S  # noqa: E402
 from quantbench.results import FIGURES  # noqa: E402
@@ -913,6 +914,72 @@ def fig_generalization():
         ax3.set_title("(c) Qwen3: 4-bit 32B vs 16-bit 8B" if SLIDES else "(c) Qwen3 MMLU vs. memory")
     fig.tight_layout()
     save(fig, "general_qwen3")
+
+
+def fig_general_nf4():
+    """Slides: the one speed trend that changes on Qwen3-8B (NF4 turns slower than BF16), and why:
+    on HF, NF4's time per token follows the number of decoder layers, not the model size."""
+    fq, fr = A.family_pair("7b", "q3-8b")
+    if not fr:
+        return
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=fsz((6.6, 2.0), (11.0, 3.6)))
+    fsl = 5.6 * FS / 0.8
+    # (a) slope chart: only NF4 changes trend, so it is drawn bold; the others are faded
+    cfg = [("awq-int4", "vllm", "AWQ-INT4"), ("fp8", "vllm", "FP8"), ("nf4", "hf", "NF4"), ("int8", "hf", "LLM.int8()")]
+    ax1.axhline(1, color=S.INK2, lw=0.8, ls=":", zorder=1)
+    for c, b, name in cfg:
+        v0, v1 = fq.get(f"tpot_b1_{c}", np.nan), fr.get(f"tpot_b1_{c}", np.nan)
+        if np.isnan(v0) or np.isnan(v1):
+            continue
+        st, strong = S.style(b, c), c == "nf4"
+        ax1.plot([0, 1], [v0, v1], color=st["color"], ls=st["linestyle"], lw=1.8 if strong else 0.8,
+                 alpha=1.0 if strong else 0.35, marker=st["marker"], ms=4.2 if strong else 3.2,
+                 markerfacecolor=st["markerfacecolor"], markeredgecolor=st["markeredgecolor"], zorder=3 if strong else 2)
+        kw = dict(textcoords="offset points", va="center", fontsize=fsl, color=st["color"] if strong else S.MUTED,
+                  fontweight="bold" if strong else "normal")
+        ax1.annotate(f"{v0:.2f}\u00d7", (0, v0), xytext=(-5, 0), ha="right", **kw)
+        ax1.annotate(f"{name} {v1:.2f}\u00d7", (1, v1), xytext=(5, 0), ha="left", **kw)
+    ax1.text(1.98, 1.04, "BF16 speed", fontsize=fsl * 0.9, color=S.MUTED, ha="right", va="bottom")
+    ax1.set_yscale("log", base=2)
+    ax1.set_yticks([0.25, 0.5, 1, 2])
+    ax1.set_yticklabels(["0.25\u00d7", "0.5\u00d7", "1\u00d7", "2\u00d7"])
+    ax1.set_ylim(0.2, 3.2)
+    ax1.set_xticks([0, 1])
+    ax1.set_xticklabels([f"Qwen2.5-7B\n{configs.LAYERS['7b']} layers", f"Qwen3-8B\n{configs.LAYERS['q3-8b']} layers"])
+    ax1.set_xlim(-0.5, 2.0)
+    ax1.set_ylabel("decode speedup over BF16")
+    ax1.set_title("(a) Only NF4 changes: faster \u2192 slower")
+    ax1.grid(axis="x", visible=False)
+    # (b) why: NF4 (HF) time per token against the number of decoder layers, every model we ran
+    agg, _ = A.sweeps()
+    g = agg[(agg.backend == "hf") & (agg.batch == 1) & (agg.input_len == 512) & (agg.output_len == 128)
+            & (agg.tag == "grid") & (agg.precision == "nf4")]
+    pts = [(configs.LAYERS[r["size"]], r.tpot * 1e3, configs.MODEL_LABEL[r["size"]]) for _, r in g.iterrows()
+           if r["size"] in configs.LAYERS]
+    if pts:
+        L_, t_ = np.array([q[0] for q in pts], float), np.array([q[1] for q in pts])
+        k = float((L_ * t_).sum() / (L_ * L_).sum())          # least-squares line through the origin
+        ax2.plot([0, 70], [0, 70 * k], color=S.MUTED, lw=0.9, ls="--", zorder=1)
+        ax2.text(2, 29.5, f"dashed line: {k:.2f} ms \u00d7 layers", ha="left", va="top", fontsize=fsl, color=S.INK2)
+        st = S.style("hf", "nf4")
+        off = {"Qwen2.5-3B": (6, 0, "left"), "Qwen2.5-7B": (6, -4, "left"), "Qwen3-8B": (-6, 4, "right"),
+               "Qwen2.5-14B": (6, -5, "left"), "Qwen3-32B": (-6, 3, "right")}
+        for L0, t0, lab in pts:
+            strong = lab in ("Qwen2.5-3B", "Qwen2.5-7B")
+            ax2.plot(L0, t0, marker=st["marker"], ms=4.6 if strong else 3.8, color=st["color"], markerfacecolor="white",
+                     markeredgewidth=1.4 if strong else 0.9, ls="none", zorder=3)
+            dx, dy, ha = off.get(lab, (6, 0, "left"))
+            ax2.annotate(f"{lab}: {t0:.1f} ms", (L0, t0), xytext=(dx, dy), textcoords="offset points", ha=ha,
+                         va="center", fontsize=fsl, color=S.INK if strong else S.INK2,
+                         fontweight="bold" if strong else "normal")
+        ax2.set_xlim(0, 72)
+        ax2.set_ylim(0, 30)
+    ax2.set_xlabel("decoder layers")
+    ax2.set_ylabel("NF4 (HF) time per token (ms)")
+    ax2.set_title("(b) Why: NF4 time follows the layer count")
+    ax2.grid(axis="x", visible=False)
+    fig.tight_layout()
+    save(fig, "general_nf4")
 
 
 # ----------------------------------------------------------------------------- Q4 quality
