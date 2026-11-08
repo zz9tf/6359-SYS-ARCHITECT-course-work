@@ -1,71 +1,72 @@
 \section{Results}
 \label{sec:results}
 
+We explain \cref{fig:matrix} in the order its effects build on each other: saved bytes
+(\cref{sec:q1}), speed at small batches (\cref{sec:q2}), how long it lasts (\cref{sec:q3,sec:mechanism}),
+real traffic (\cref{sec:real}), quality (\cref{sec:q4}) and generality (\cref{sec:general}).
+
 \subsection{Q1: How much memory does quantization actually save?}
 \label{sec:q1}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{q1_memory_main}
-\caption{\textbf{Q1: the real saving is smaller than the bit-width suggests.} (a)~Weight memory of
-Qwen2.5-7B measured after loading (bars) against the naive estimate $\#\text{params}\times\text{bits}/8$
-(black ticks); labels give the saving against BF16 on the same backend. (b)~Saving of the peak
-memory on HF as more tokens are in flight (dashed: the saving of the weights alone).}
+\caption{\textbf{Q1: the saving is smaller than the bit-width suggests.} (a)~Weight-memory saving of
+each configuration on Qwen2.5-7B against the nominal ratio of its bit-width (dashed). (b)~Saving of
+the peak memory on HF as more tokens are in flight; dashed lines give the saving of the weights
+alone.}
 \label{fig:memory}
 \end{figure}
 
-\answer{Less than the bit-width suggests, and less as the context grows. On vLLM, the saved memory
-becomes room for more requests.}
+\answer{Less than the bit-width suggests, and less again at run time. The saved memory pays off as
+capacity.}
 
-\textbf{Weights.} The naive estimate is too low for every format, by up to \NaiveExcessMax\% for NF4
-(\cref{fig:memory}a). Only the decoder's linear layers are quantized: the embedding and the LM head
-(\EmbedShareSeven\% of Qwen2.5-7B's parameters) stay in 16 bits, and each format stores scales.
-Counting these parts predicts every HF measurement within \ModelErrMax\% (\cref{app:memory}). So
-4-bit weights shrink the 7B model by \WtNFSeven{} (NF4) to \WtAWQSeven{} (AWQ-INT4), and 8-bit weights
-by \WtIntEightSeven.
+\textbf{Weights.} Quantization shrinks only the linear layers inside the decoder. The embedding and
+the LM head, \EmbedShareSeven\% of Qwen2.5-7B's parameters, stay in 16 bits, and each format adds its
+scales. So 4-bit weights save \WtNFSeven--\WtAWQSeven{} instead of $4\times$, and 8-bit weights
+\WtIntEightSeven{} instead of $2\times$ (\cref{fig:memory}a). A model that counts these parts predicts
+every measurement within \ModelErrMax\% (\cref{app:memory}).
 
-\textbf{Run time.} The KV cache and the activations are not quantized, so the saving shrinks as more
-tokens are in flight (\cref{fig:memory}b). NF4 cuts the peak memory of one short request by
-\MemSmallNF, but that of 32 requests of 2048 tokens by only \MemBigNF; LLM.int8(), which keeps extra
-copies of the activations, by \MemBigInt. On HF, the 7B model runs out of memory at $B=64$, $L=2048$ in
-every format, because the prefill activations fill the GPU.
+\textbf{Run time.} At run time the saving shrinks further, because the KV cache and the activations
+are not quantized at all. Their share grows with the number of tokens in flight. NF4's saving
+therefore falls from \MemSmallNF{} for one short request to \MemBigNF{} for 32 requests of 2048
+tokens, and LLM.int8(), which keeps extra copies of the activations, falls to \MemBigInt{}
+(\cref{fig:memory}b).
 
-\textbf{Capacity.} vLLM turns all the memory the weights leave free (within 85\% of the GPU) into KV
-cache. With AWQ-INT4, Qwen2.5-7B holds \KVratioAWQ{} as many cached tokens as with BF16 (\KVawqSeven{}
-vs.\ \KVbfSeven). \FourteenNote{}
+\textbf{Capacity.} The saved memory is still valuable, but as capacity rather than as a smaller
+footprint. vLLM turns it into KV cache, so AWQ-INT4 lets Qwen2.5-7B hold \KVratioAWQ{} as many tokens
+as BF16 (\KVawqSeven{} vs.\ \KVbfSeven). \FourteenNote{}
 
 \subsection{Q2: How do latency and throughput change?}
 \label{sec:q2}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{q2_latency_throughput}
-\caption{\textbf{Q2: latency and throughput of Qwen2.5-7B} with 128 generated tokens. (a)~TTFT of one
-request; (b)~TPOT and (c)~output throughput for 512-token prompts. Solid lines: vLLM; dashed lines
-with hollow markers: HF with bitsandbytes.}
-\label{fig:latency}
+\includegraphics[width=\linewidth]{speed_effects}
+\caption{\textbf{Q2 and Q3: when the saved bytes become speed} (Qwen2.5-7B, speedup over BF16 on the
+same stack). (a)~Decode speedup at batch size~1 against the weight memory saved: if decode time were
+set only by the bytes read, every point would lie on the dashed line. (b)~Decode speedup as the batch
+grows (512-token prompts). (c)~Prefill (TTFT) speedup for one prompt of growing length.}
+\label{fig:speed}
 \end{figure}
 
-\answer{With fused kernels, fewer bytes give an almost proportional decode speedup for small
-batches; with bitsandbytes they do not. No weight-only format shortens prefill.}
+\answer{The saved bytes speed up decoding only when a fused kernel hides the dequantization. Prefill
+gets faster only when the activations are quantized too.}
 
-\textbf{Decode.} At batch size 1 (prediction P1), vLLM's BF16 step takes \TPOTbfVllmSeven\,ms,
-within \BWutilVllm\% of the time needed to read the 15.2\,GB of weights, so it is purely memory-bound.
-On vLLM, fewer bytes do mean less time (\cref{fig:latency}b): AWQ-INT4 decodes \AWQspeedup{} faster
-than BF16, GPTQ-INT8 \GPTQeightspeedup{} and FP8 \FPeightspeedup, which is \IdealAWQ--\IdealGQE\% of
-their byte savings. On HF the same idea fails: LLM.int8() is \INTeightslowdown{} slower than BF16, and
-NF4 is \NFsevenB{} faster on 7B (\NFfourteenB{} on 14B) but \NFthreeslow{} slower on 3B.
-These are whole stacks: LLM.int8() and GPTQ-INT8 differ in method, activation path and engine, not
-only in kernel. \Cref{sec:mechanism} separates the kernels from the rest.
+\textbf{Decode.} At batch size~1, decoding is memory-bound: vLLM's BF16 step takes
+\TPOTbfVllmSeven\,ms, within \BWutilVllm\% of the time needed to read the weights once (prediction P1).
+Fewer weight bytes should therefore shorten the step in proportion. On vLLM they do: AWQ-INT4 decodes
+\AWQspeedup{} faster, GPTQ-INT8 \GPTQeightspeedup{} and FP8 \FPeightspeedup, which is
+\IdealAWQ--\IdealGQE\% of their byte savings (\cref{fig:speed}a). On HF they do not: NF4 saves almost as
+many bytes as AWQ-INT4 but is only \NFsevenB{} faster, and LLM.int8() is \INTeightslowdown{} slower.
+The same bit-width can thus speed decoding up or slow it down. The difference lies in the whole stack
+(method, activation path and engine), which \cref{sec:mechanism} takes apart.
 
-\textbf{Prefill.} As P3 predicts, AWQ and GPTQ change the TTFT by at most \TTFTwoMax\%, and NF4 makes
-it \TTFTnfSlow{} slower, because bitsandbytes dequantizes every weight matrix first
-(\cref{fig:latency}a). FP8, which also quantizes the activations, makes a 2048-token prefill
-\TTFTfpLong{} faster.
-
-\textbf{Throughput.} At $B=256$ (\cref{fig:latency}c), AWQ-INT4 (\ThrAWQmax{} tokens/s) no longer
-beats BF16 (\ThrBFmax), while FP8 reaches \ThrFPmax{} tokens/s, \ThrFPratio{} the BF16 rate. Energy
-per token follows latency (\cref{app:speed}).
+\textbf{Prefill.} Prefill behaves differently, because it is compute-bound from the start (P3). Fewer
+weight bytes therefore barely help: AWQ and GPTQ change the TTFT by at most \TTFTwoMax\%, and NF4 even
+slows it by \TTFTnfSlow, since bitsandbytes dequantizes each matrix before using it
+(\cref{fig:speed}c). Only the W8A8 formats, which also quantize the activations, shorten prefill: FP8
+by \TTFTfpLong{} for a 2048-token prompt, and LLM.int8() by only \TTFTintLongOne, as its overheads eat most of the gain.
 
 \subsection{Q3: When does lower precision pay off?}
 \label{sec:q3}
@@ -73,26 +74,25 @@ per token follows latency (\cref{app:speed}).
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{q3_speedup_heatmaps}
-\caption{\textbf{Q3: where each format pays off.} End-to-end speedup of $B$ requests ($L$-token prompts,
-128 generated tokens) over BF16 on the same backend, Qwen2.5-7B. Dashes: out of memory or not run.
-GPTQ-INT4 behaves like AWQ-INT4 (\cref{tab:crossover} in \cref{app:speed}).}
+\caption{\textbf{Q3: where each configuration pays off.} End-to-end speedup of $B$ requests
+($L$-token prompts, 128 generated tokens) over BF16 on the same stack, Qwen2.5-7B. Columns follow the
+quantization type, rows the stack (no W8A16 runs on HF). Dashes: out of memory or not run. GPTQ-INT4
+behaves like AWQ-INT4 (\cref{tab:crossover}).}
 \label{fig:heatmaps}
 \end{figure}
 
-\answer{Weight-only formats pay off for small batches, and their gain ends near the batch size at
-which decoding becomes compute-bound. FP8 pays off everywhere; the bitsandbytes formats rarely do.}
+\answer{Weight-only gains last only while decoding is memory-bound. FP8 pays off at every batch size.}
 
-\Cref{fig:heatmaps} maps the end-to-end speedup over batch size and prompt length. Three regimes
-appear. (i)~\emph{Weight-only formats with fused kernels} (AWQ, GPTQ) win by up to \AWQmaxEtoE{} when
-decode dominates. Their gain shrinks as the batch and the prompts grow, and AWQ-INT4 stops winning at
-$B\approx\AWQcross$ for 512-token prompts, close to $M\approx R\approx\RidgeBF$, where BF16 decoding
-itself becomes compute-bound (P2).
-(ii)~\emph{FP8 W8A8} wins in every cell (\FPminEtoE--\FPmaxEtoE), because it halves the bytes
-\emph{and} raises the compute roof. (iii)~\emph{bitsandbytes formats} rarely win: LLM.int8() is slower
-in every cell (\INTminEtoE--\INTmaxEtoE), and NF4 wins only for 7B below $B\approx\NFcross$. Longer
-answers raise the share of decode and push the crossover up: at $B=16$, AWQ-INT4 speeds up a request
-with 32 output tokens by \OutAWQSixteenShort, but one with 512 output tokens by \OutAWQSixteenLong{}
-(\cref{app:speed}).
+The batch-1 gains rest on decoding being memory-bound, and batching removes that condition. Every
+extra request reuses the same weights, so the work per byte grows with the batch (\cref{eq:intensity}).
+The speedup of weight-only formats therefore shrinks as the batch grows (\cref{fig:speed}b) and is gone
+near the BF16 ridge point (P2): AWQ-INT4 stops winning at $B\approx\AWQcross$ for 512-token prompts
+(\cref{fig:heatmaps}). Long prompts add compute-bound prefill to each request, so with long prompts
+the gain fades sooner. FP8 does not fade, because it also halves the compute: it stays
+\FPminEtoE--\FPmaxEtoE{} faster in every cell. The bitsandbytes formats never reach the memory-bound
+gain in the first place. LLM.int8() is slower in every cell (\INTminEtoE--\INTmaxEtoE), and NF4 wins
+only below $B\approx\NFcross$. Long answers do the reverse: they add memory-bound decode and raise
+the gain (at $B=16$, \OutAWQSixteenShort{} for 32 output tokens, \OutAWQSixteenLong{} for 512; \cref{app:speed}).
 
 \subsection{Why: kernels, the roofline and host overhead}
 \label{sec:mechanism}
@@ -106,34 +106,32 @@ size); ticks mark where it falls below 1.05. (b)~The same kernels on the measure
 \label{fig:kernels}
 \end{figure}
 
-\answer{The roofline explains vLLM, where the kernels are fast. The CPU cost of launching kernels
-explains HF, where the GPU is often idle.}
+\answer{The roofline explains the vLLM kernels. The CPU cost of launching kernels explains the HF
+stack.}
 
-\textbf{Kernels.} We time each low-bit kernel alone on the matrix shapes of one 7B decoder layer
-(\cref{fig:kernels}a). Marlin W4A16 is \MarlinFourMone{} faster than BF16 at $M=1$ and keeps a gain
-above 5\% up to $M\approx\MarlinFourCross$; Marlin W8A16 starts at \MarlinEightMone{} and ends at
-$M\approx\MarlinEightCross$. \Cref{fig:kernels}b shows why (P2): fewer bytes per weight move a kernel
-up the bandwidth roof faster, but it hits the same BF16 compute roof. Real kernels approach the roof
-gradually, so the crossovers lie somewhat above the ridge point. FP8 W8A8 is \FPkernMone{} faster at
-$M=1$ and still \FPkernMmax{} at $M=8192$, because its compute roof is about three times higher
-(\FPeightmeas{} vs.\ \BFmeas\,TFLOP/s). The bitsandbytes kernels are not slow everywhere: NF4's
-kernel is \NFkernMone{} faster than BF16 at $M=1$ (it dequantizes whole matrices for larger $M$), yet
-the whole NF4 model is only \NFsevenB{} faster. Time must be lost outside the kernels.
+\textbf{Kernels.} To test the mechanism directly, we time each kernel alone on the matrix shapes of one
+7B decoder layer (\cref{fig:kernels}a). Marlin W4A16 is \MarlinFourMone{} faster than BF16 at $M=1$,
+as P1 predicts for four times fewer bytes. Its gain then shrinks and ends at $M\approx\MarlinFourCross$,
+because it hits the same BF16 compute roof (\cref{fig:kernels}b). Real kernels reach that roof
+gradually, so the crossover sits above the ridge point. FP8's compute roof is about three times higher
+(\FPeightmeas{} vs.\ \BFmeas\,TFLOP/s), so FP8 is still \FPkernMmax{} faster at $M=8192$.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{mech_decode_breakdown}
-\caption{\textbf{Where an HF decode step goes} (Qwen2.5-7B, 512-token prompts): GPU time by kernel
-type, and the time the GPU waits for the CPU (hatched).}
+\caption{\textbf{Where an HF decode step goes} (Qwen2.5-7B, batch size~1, 512-token prompt): GPU time by
+kernel type, and the time the GPU waits for the CPU (hatched).}
 \label{fig:profile}
 \end{figure}
 
-\textbf{Host overhead.} \Cref{fig:profile} profiles one HF decode step of the 7B model. With BF16, the
-GPU is busy \BusyBFone\% of the step. LLM.int8() launches \KernIntRatio{} as many kernels (casts,
-outlier handling, quantization, two matrix multiplies per layer), and the GPU is busy only
-\BusyIntone\% of the time: Python and kernel launches set the speed. NF4 lies in between (\BusyNFone\%
-busy). More layers mean more launches, so the 36-layer 3B model suffers more than the 28-layer 7B
-model. vLLM avoids most of this cost with CUDA graphs, which replay a decode step with very few launches.
+\textbf{Host overhead.} The kernels explain the vLLM results, but not the HF ones. NF4's kernel alone
+is \NFkernMone{} faster than BF16 at $M=1$, yet the whole NF4 model is only \NFsevenB{} faster, so
+time must be lost outside the kernels. A profile of one decode step shows where (\cref{fig:profile}).
+With BF16 the GPU is busy \BusyBFone\% of the step, with NF4 only \BusyNFone\%, and with LLM.int8(),
+which launches \KernIntRatio{} as many kernels, only \BusyIntone\%. For the rest of the step the GPU
+waits for Python to launch the next kernel. More layers mean more launches, so this overhead grows
+with depth; this is why NF4 is slower than BF16 on the 36-layer 3B model. vLLM avoids most of it with
+CUDA graphs, which replay a decode step with very few launches.
 
 \subsection{Do the results hold for real traffic?}
 \label{sec:real}

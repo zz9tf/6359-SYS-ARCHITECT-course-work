@@ -53,9 +53,10 @@ def slide_setup(prs, facts):
     # configs card (two columns)
     x1, w1 = x0 + w + 0.15, 9.5 - (x0 + w + 0.15)
     U.box(s, x1, U.TOP, w1, 1.85, fill=U.LIGHT, radius=0.08)
-    U.card_header(s, x1, U.TOP, w1, "LuLayers", "Eight configurations")
-    rows = [("Hugging Face + bitsandbytes", [("BF16", "2A78D6"), ("LLM.int8()", "D55181"), ("NF4", "C98500")]),
-            ("vLLM + fused kernels", [("BF16", "2A78D6"), ("FP8", "008300"), ("GPTQ-INT8", "D55181"),
+    U.card_header(s, x1, U.TOP, w1, "LuLayers", "Configurations (colour = W8A8 / W8A16 / W4A16)")
+    # chip colours = quantization type, as in the report (W8A8 green, W8A16 pink, W4A16 amber, BF16 grey)
+    rows = [("Hugging Face + bitsandbytes", [("BF16", "5F5E5A"), ("LLM.int8()", "008300"), ("NF4", "C98500")]),
+            ("vLLM + fused kernels", [("BF16", "5F5E5A"), ("FP8", "008300"), ("GPTQ-INT8", "D55181"),
                                       ("AWQ / GPTQ-INT4", "C98500")])]
     y = U.TOP + 0.5
     for title, chips in rows:

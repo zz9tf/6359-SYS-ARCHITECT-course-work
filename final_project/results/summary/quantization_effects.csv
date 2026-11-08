@@ -1,0 +1,7 @@
+type,method,backend,weight saving (x),"KV-cache capacity (x, vLLM)","peak-memory saving, 32x2048 tokens (x, HF)","prefill speedup, B=1 L=2048 (x)","decode speedup, B=1 (x)","throughput ratio, B=64 (x)","energy saving per token, B=1 (x)",perplexity change,GSM8K change (points),GSM8K McNemar p,MMLU change (points),MMLU McNemar p
+W8A8,FP8,vllm,1.749,1.623,,1.773,1.59,1.759,1.946,0.054,0,1,-0.142,0.327
+W8A8,LLM.int8(),hf,1.749,,1.041,1.051,0.291,0.601,0.823,0.027,-0.227,0.771,-0.207,0.134
+W8A16,GPTQ-INT8,vllm,1.724,1.605,,0.933,1.641,1.119,1.885,0.002,0.91,0.043,0.043,0.61
+W4A16,AWQ-INT4,vllm,2.701,1.902,,0.939,2.438,1.152,2.541,0.39,-0.455,0.576,-1.588,0
+W4A16,GPTQ-INT4,vllm,2.712,1.857,,0.988,2.453,1.196,2.651,0.318,0.227,0.828,-1.41,0
+W4A16,NF4,hf,2.602,,1.493,0.926,1.134,0.929,1.597,0.312,-0.531,0.5,-0.62,0.002

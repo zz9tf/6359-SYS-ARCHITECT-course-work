@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 import uta as U
-from layouts import figure_with_tiles_below, figure_with_tiles_right
+from layouts import _fit, figure_with_tiles_below, figure_with_tiles_right
 from quantbench import analysis as A
 
 
@@ -55,6 +55,23 @@ def facts_from_results():
     return f
 
 
+def slide_overview(prs, fig_dir):
+    """One picture of the whole study: each quantization config against each metric."""
+    fig = fig_dir / "impact_matrix.png"
+    if not fig.exists():
+        return
+    s = U.content_slide(prs, "What Quantization Does to Each Metric",
+                        "Qwen2.5-7B, each config vs. BF16 on the same stack \u2014 blue: better, red: worse",
+                        notes=("Read the columns from left to right; each limits the next. Memory: every format saves "
+                               "memory, but 4-bit weights save only 2.6 to 2.7x, not 4x. Speed: the saved bytes become "
+                               "decode speed on vLLM (blue) but not on HF, and only FP8, which also quantizes the "
+                               "activations, speeds up prefill and high-batch throughput. Quality: 8-bit rows are grey "
+                               "(no significant change); 4-bit rows lose 0.6 to 1.6 MMLU points on this model."))
+    fw, fh = _fit(fig, 9.0, U.BOT - U.TOP + 0.15)
+    U.picture(s, fig, 0.5 + (9.0 - fw) / 2, U.TOP - 0.05, w=fw,
+              alt="Heat map of the change in memory, speed and quality for six quantized configurations")
+
+
 def slide_q1(prs, fig_dir, f):
     s = U.content_slide(prs, "Q1 — Memory: Smaller, but Not 4× Smaller",
                         "Only the linear layers shrink; embeddings, LM head, KV cache and activations do not",
@@ -90,8 +107,8 @@ def slide_q2(prs, fig_dir, f):
              (_x(1 / int8, 1) + " slower", "LLM.int8() on HF, batch 1",
               "different method, activation path and engine, not only a different kernel"),
              (_x(fp_ratio, 2), "FP8 throughput at batch 256", "AWQ-INT4 there: no faster than BF16")]
-    figure_with_tiles_below(s, fig_dir / "teaser_speedup.png", tiles,
-                            alt="Decode speedup against weight memory saved, and against batch size")
+    figure_with_tiles_below(s, fig_dir / "speed_effects.png", tiles,
+                            alt="Decode speedup against bytes saved and batch size, and prefill speedup against prompt length")
 
 
 def slide_q3(prs, fig_dir, f):
@@ -323,7 +340,7 @@ def slide_takeaways(prs, f):
     thr = agg[(agg["size"] == "7b") & (agg.backend == "vllm") & (agg.batch == 256) & (agg.input_len == 512)
               & (agg.tag == "grid")].set_index("precision").out_tok_s
     s = U.content_slide(prs, "Takeaways: When Does Quantization Pay Off?",
-                        "Bit-width alone predicts little \u2014 the implementation and the regime decide",
+                        "Each finding limits the next: bytes saved \u2192 speed at small batch \u2192 quality \u2192 bigger model",
                         notes=("Six rules: plan memory with the real ratio; for interactive serving use 4-bit weights with a "
                                "fused kernel; for throughput use FP8 W8A8; treat bitsandbytes as a memory tool, not a speed-up; "
                                "8-bit formats with good kernels preserve quality while 4-bit costs one to three MMLU points; "
@@ -355,6 +372,7 @@ def slide_takeaways(prs, f):
 def add_results_slides(prs, fig_dir, facts, setup):
     f = facts_from_results()
     setup()
+    slide_overview(prs, fig_dir)
     slide_q1(prs, fig_dir, f)
     slide_q2(prs, fig_dir, f)
     slide_q3(prs, fig_dir, f)

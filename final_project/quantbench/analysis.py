@@ -318,3 +318,78 @@ def family_pair(a, b):
         return sa, sb
     bc = min(sa["b_fit"], sb["b_fit"])
     return family_summary(a, bcmp=bc), family_summary(b, bcmp=bc)
+
+
+# Rows of the effect matrix: what is quantized (type), the method, and the stack that runs it.
+EFFECT_ROWS = [("W8A8", "vllm", "fp8", "FP8"), ("W8A8", "hf", "int8", "LLM.int8()"),
+               ("W8A16", "vllm", "gptq-int8", "GPTQ-INT8"),
+               ("W4A16", "vllm", "awq-int4", "AWQ-INT4"), ("W4A16", "vllm", "gptq-int4", "GPTQ-INT4"),
+               ("W4A16", "hf", "nf4", "NF4")]
+# Columns: (key, group, header, kind). kind "ratio": >1 is better than BF16; "dppl": lower is better; "dacc": points.
+EFFECT_COLS = [("w_save", "Memory", "Weights", "ratio"), ("kv_gain", "Memory", "KV cache", "ratio"),
+               ("peak_save", "Memory", "Peak", "ratio"),
+               ("ttft", "Speed", "Prefill", "ratio"), ("tpot1", "Speed", "Decode", "ratio"),
+               ("thr64", "Speed", "Thrpt.", "ratio"), ("energy1", "Speed", "Energy", "ratio"),
+               ("dppl", "Quality", "PPL", "dppl"), ("dgsm", "Quality", "GSM8K", "dacc"),
+               ("dmmlu", "Quality", "MMLU", "dacc")]
+
+
+def effect_matrix(size="7b", L_ttft=2048, L=512, B_thr=64, peak_cell=(32, 2048), quality_sizes=("3b", "7b", "14b")):
+    """Effect of each quantized configuration on each metric, relative to BF16 on the same stack.
+
+    Memory: weight-memory saving; KV-cache capacity gain (vLLM); peak-memory saving with
+    peak_cell = (B, L) in flight (HF). Speed: TTFT speedup (B=1, L_ttft), decode (TPOT) speedup at
+    B=1, output-throughput ratio at B_thr, energy-per-token saving at B=1. Quality: perplexity change
+    and GSM8K / MMLU accuracy change (points) against HF BF16, with a flag for significance after a
+    Bonferroni correction over the comparisons of each benchmark across quality_sizes.
+    """
+    agg, _ = sweeps()
+    sp = with_speedup(agg)
+    sp = sp[(sp["size"] == size) & (sp.output_len == 128) & (sp.tag == "grid")]
+    hf, vl = loads()
+    ppl, gsm = quality()
+    mm = mmlu()
+
+    def cell(b, p, B, Lx, col):
+        r = sp[(sp.backend == b) & (sp.precision == p) & (sp.batch == B) & (sp.input_len == Lx)]
+        return float(r[col].iloc[0]) if len(r) else np.nan
+
+    def weights(b, p):
+        if b == "hf":
+            r = hf[(hf["size"] == size) & (hf.precision == p)]
+            return float(r.weights_bytes.iloc[0]) if len(r) else np.nan
+        r = vl[(vl["size"] == size) & (vl.precision == p)]
+        return float(r.load_gib.iloc[0]) if len(r) else np.nan
+
+    def kv(p):
+        r = vl[(vl["size"] == size) & (vl.precision == p)]
+        return float(r.kv_cache_tokens.iloc[0]) if len(r) and r.kv_cache_tokens.notna().iloc[0] else np.nan
+
+    def acc(df, b, p):
+        r = df[(df.backend == b) & (df["size"] == size) & (df.precision == p)] if not df.empty else df
+        return float(r.accuracy.iloc[0]) * 100 if len(r) else np.nan
+
+    def pplv(b, p):
+        r = ppl[(ppl.backend == b) & (ppl["size"] == size) & (ppl.precision == p)] if not ppl.empty else ppl
+        return float(r.ppl.iloc[0]) if len(r) else np.nan
+
+    n_tests = {bench: sum(paired(bench, ("hf", s, "bf16"), (b, s, p)) is not None
+                          for s in quality_sizes for _, b, p, _ in EFFECT_ROWS) for bench in ("gsm8k", "mmlu")}
+    rows = []
+    for typ, b, p, name in EFFECT_ROWS:
+        tput = cell(b, p, B_thr, L, "out_tok_s") / cell(b, p, B_thr, L, "out_tok_s_bf16")
+        en = cell(b, p, 1, L, "energy_ratio")
+        row = {"type": typ, "backend": b, "precision": p, "method": name,
+               "w_save": weights(b, "bf16") / weights(b, p),
+               "kv_gain": kv(p) / kv("bf16") if b == "vllm" else np.nan,
+               "peak_save": cell(b, p, peak_cell[0], peak_cell[1], "mem_saving") if b == "hf" else np.nan,
+               "ttft": cell(b, p, 1, L_ttft, "speedup_ttft"), "tpot1": cell(b, p, 1, L, "speedup_tpot"),
+               "thr64": tput, "energy1": 1 / en if en == en else np.nan,
+               "dppl": pplv(b, p) - pplv("hf", "bf16")}
+        for bench, key, df in (("gsm8k", "dgsm", gsm), ("mmlu", "dmmlu", mm)):
+            t = paired(bench, ("hf", size, "bf16"), (b, size, p))
+            row[key] = acc(df, b, p) - acc(df, "hf", "bf16")
+            row[key + "_p"] = t["p_value"] if t else np.nan
+            row[key + "_sig"] = bool(t and n_tests[bench] and t["p_value"] < 0.05 / n_tests[bench])
+        rows.append(row)
+    return pd.DataFrame(rows)

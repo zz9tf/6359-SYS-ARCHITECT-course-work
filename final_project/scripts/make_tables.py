@@ -15,11 +15,12 @@ from quantbench.results import RESULTS, ROOT  # noqa: E402
 
 TEX = ROOT / "report" / "tables"
 MD = RESULTS / "summary"
-ORDER = [("hf", "bf16"), ("hf", "int8"), ("hf", "nf4"), ("vllm", "bf16"), ("vllm", "fp8"),
-         ("vllm", "gptq-int8"), ("vllm", "awq-int4"), ("vllm", "gptq-int4")]
-TEXNAME = {("hf", "bf16"): "HF BF16", ("hf", "int8"): "HF INT8 (LLM.int8)", ("hf", "nf4"): "HF NF4",
-           ("vllm", "bf16"): "vLLM BF16", ("vllm", "fp8"): "vLLM FP8 W8A8", ("vllm", "gptq-int8"): "vLLM GPTQ W8A16",
-           ("vllm", "awq-int4"): "vLLM AWQ W4A16", ("vllm", "gptq-int4"): "vLLM GPTQ W4A16"}
+# rows follow the quantization type (BF16, W8A8, W8A16, W4A16), as in the report's Figure 1
+ORDER = [("hf", "bf16"), ("vllm", "bf16"), ("vllm", "fp8"), ("hf", "int8"), ("vllm", "gptq-int8"),
+         ("vllm", "awq-int4"), ("vllm", "gptq-int4"), ("hf", "nf4")]
+TEXNAME = {("hf", "bf16"): "BF16 (HF)", ("hf", "int8"): "W8A8 LLM.int8() (HF)", ("hf", "nf4"): "W4A16 NF4 (HF)",
+           ("vllm", "bf16"): "BF16 (vLLM)", ("vllm", "fp8"): "W8A8 FP8 (vLLM)", ("vllm", "gptq-int8"): "W8A16 GPTQ (vLLM)",
+           ("vllm", "awq-int4"): "W4A16 AWQ (vLLM)", ("vllm", "gptq-int4"): "W4A16 GPTQ (vLLM)"}
 
 
 def write(df, name, caption, label, colfmt=None, note=None, wide=False, pos="htbp", tex_names=None):
@@ -49,9 +50,9 @@ def write_tex(name, body, caption, label, note=None, size="\\small", sep="4pt", 
     print(f"  wrote {name}")
 
 
-SHORT = {("hf", "bf16"): "HF BF16", ("hf", "int8"): "HF INT8", ("hf", "nf4"): "HF NF4",
-         ("vllm", "bf16"): "vLLM BF16", ("vllm", "fp8"): "vLLM FP8", ("vllm", "gptq-int8"): "vLLM GPTQ-8",
-         ("vllm", "awq-int4"): "vLLM AWQ-4", ("vllm", "gptq-int4"): "vLLM GPTQ-4"}
+SHORT = {("hf", "bf16"): "BF16 (HF)", ("hf", "int8"): "LLM.int8() (HF)", ("hf", "nf4"): "NF4 (HF)",
+         ("vllm", "bf16"): "BF16 (vLLM)", ("vllm", "fp8"): "FP8 (vLLM)", ("vllm", "gptq-int8"): "GPTQ-8 (vLLM)",
+         ("vllm", "awq-int4"): "AWQ-4 (vLLM)", ("vllm", "gptq-int4"): "GPTQ-4 (vLLM)"}
 
 
 def signed(v, nd):
@@ -218,8 +219,8 @@ def table_quality():
           "two-sided exact McNemar test on the paired answers.", "tab:quality",
           colfmt="llrrrrrrrr", wide=True,
           note="$^{\\ddagger}$High only on raw text, not on chat-formatted text (\\cref{sec:q4}). "
-               "$^{\\S}$Run with BF16 activations: with the checkpoint's FP16 activations, some 2048-token windows "
-               "overflow (\\cref{sec:general}).")
+               "$^{\\S}$Run with BF16 activations: with the checkpoint's own FP16 activations, some 2048-token "
+               "windows overflow and the loss becomes NaN.")
 
 
 def table_quality_main():
@@ -227,9 +228,9 @@ def table_quality_main():
     ppl, gsm = A.quality()
     mm = A.mmlu()
     sizes = ["3b", "7b", "14b"]
-    spec = [("hf", "int8", "LLM.int8()", "HF", "8/8"), ("vllm", "fp8", "FP8", "vLLM", "8/8"),
-            ("vllm", "gptq-int8", "GPTQ-INT8", "vLLM", "8/16"), ("hf", "nf4", "NF4", "HF", "4/16"),
-            ("vllm", "awq-int4", "AWQ-INT4", "vLLM", "4/16"), ("vllm", "gptq-int4", "GPTQ-INT4", "vLLM", "4/16")]
+    spec = [("vllm", "fp8", "FP8", "vLLM", "W8A8"), ("hf", "int8", "LLM.int8()", "HF", "W8A8"),
+            ("vllm", "gptq-int8", "GPTQ-INT8", "vLLM", "W8A16"), ("vllm", "awq-int4", "AWQ-INT4", "vLLM", "W4A16"),
+            ("vllm", "gptq-int4", "GPTQ-INT4", "vLLM", "W4A16"), ("hf", "nf4", "NF4", "HF", "W4A16")]
 
     def pick(df, b, size, p, col, scale=1.0):
         if df.empty:
@@ -258,11 +259,11 @@ def table_quality_main():
         d = v - base
         return (f"${d:+.2f}$" if round(d, 2) != 0 else "$0.00$") + ("$^{\\ddagger}$" if d > 3 * base else "")
 
-    lines = ["BF16 (value) & HF & 16/16 & " + " & ".join(
+    lines = ["BF16 (value) & HF & --- & " + " & ".join(
         f"{pick(ppl, 'hf', z, 'bf16', 'ppl'):.2f} & {pick(gsm, 'hf', z, 'bf16', 'accuracy', 100):.1f} & "
         f"{pick(mm, 'hf', z, 'bf16', 'accuracy', 100):.1f}" for z in sizes) + " \\\\", "\\midrule"]
     for i, (b, p, name, bk, wa) in enumerate(spec):
-        if i == 3:
+        if i in (2, 3):
             lines.append("\\midrule")
         cells = [f"{ppl_delta(b, z, p)} & {acc_delta('gsm8k', gsm, b, z, p)} & {acc_delta('mmlu', mm, b, z, p)}"
                  for z in sizes]
@@ -270,12 +271,12 @@ def table_quality_main():
     lines.append("\\midrule")
     cells = [f"{ppl_delta('vllm', z, 'bf16')} & {acc_delta('gsm8k', gsm, 'vllm', z, 'bf16')} & "
              f"{acc_delta('mmlu', mm, 'vllm', z, 'bf16')}" for z in sizes]
-    lines.append("BF16 (noise) & vLLM & 16/16 & " + " & ".join(cells) + " \\\\")
+    lines.append("BF16 (noise) & vLLM & --- & " + " & ".join(cells) + " \\\\")
     body = "\n".join(["\\begin{tabular}{lllrrrrrrrrr}", "\\toprule",
                       " & & & \\multicolumn{3}{c}{Qwen2.5-3B} & \\multicolumn{3}{c}{Qwen2.5-7B} & "
                       "\\multicolumn{3}{c}{Qwen2.5-14B} \\\\",
                       "\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\\cmidrule(lr){10-12}",
-                      "Format & Backend & W/A & PPL & GSM8K & MMLU & PPL & GSM8K & MMLU & PPL & GSM8K & MMLU \\\\",
+                      "Format & Stack & Type & PPL & GSM8K & MMLU & PPL & GSM8K & MMLU & PPL & GSM8K & MMLU \\\\",
                       "\\midrule", *lines, "\\bottomrule", "\\end{tabular}"])
     write_tex("t_quality_main", body,
               "Quality cost of each format. First row: BF16 values (WikiText-2 perplexity; GSM8K and MMLU accuracy "
@@ -327,6 +328,22 @@ def table_serving_main(size="7b"):
               f"Real traffic: 300 ShareGPT requests replayed against Qwen2.5-{size.upper()} with their reference answer "
               "lengths. $C$ is the number of concurrent requests (HF runs static batches of 16). Output tokens per "
               "second, and median TTFT and TPOT in ms.", "tab:serving_main", size="\\small", sep="5pt")
+
+
+def table_effects(size="7b"):
+    """Data behind Figure 1: effect of each quantized configuration on each metric (CSV + Markdown only)."""
+    m = A.effect_matrix(size)
+    names = {"w_save": "weight saving (x)", "kv_gain": "KV-cache capacity (x, vLLM)",
+             "peak_save": "peak-memory saving, 32x2048 tokens (x, HF)", "ttft": "prefill speedup, B=1 L=2048 (x)",
+             "tpot1": "decode speedup, B=1 (x)", "thr64": "throughput ratio, B=64 (x)",
+             "energy1": "energy saving per token, B=1 (x)", "dppl": "perplexity change",
+             "dgsm": "GSM8K change (points)", "dgsm_p": "GSM8K McNemar p", "dmmlu": "MMLU change (points)",
+             "dmmlu_p": "MMLU McNemar p"}
+    out = m[["type", "method", "backend"] + list(names)].rename(columns=names).round(3)
+    A.save_csv(out, "quantization_effects.csv")
+    MD.mkdir(parents=True, exist_ok=True)
+    (MD / "quantization_effects.md").write_text(out.to_markdown(index=False) + "\n")
+    print("  wrote quantization_effects")
 
 
 def table_serving(size="7b"):
@@ -385,8 +402,8 @@ def table_generalization(a="7b", b="q3-8b"):
 
 
 def main():
-    for f in (table_weights, table_speed, table_crossover, table_quality, table_quality_main, table_serving,
-              table_serving_main, table_generalization):
+    for f in (table_effects, table_weights, table_speed, table_crossover, table_quality, table_quality_main,
+              table_serving, table_serving_main, table_generalization):
         try:
             f()
         except Exception as e:  # keep going so partial results still produce tables

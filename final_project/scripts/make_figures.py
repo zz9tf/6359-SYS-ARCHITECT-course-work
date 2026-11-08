@@ -74,74 +74,171 @@ def pow2_axis(ax, values):
 
 
 # ----------------------------------------------------------------------------- report Figure 1
-def fig_teaser(size="7b", L=512):
-    """Report Figure 1: the same weight saving buys very different decode speedups, and batching erases them."""
+def _fmt_signed(v, nd):
+    return f"{v:+.{nd}f}".replace("-", "−") if round(v, nd) != 0 else f"{0:.{nd}f}"
+
+
+def fig_impact_matrix(size="7b"):
+    """Report Figure 1: the effect of every quantization config on every metric, against BF16 on the same stack."""
+    if SLIDES:
+        return
+    m = A.effect_matrix(size)
+    cols = A.EFFECT_COLS
+    gap_x = {"Memory": 0.0, "Speed": 0.4, "Quality": 0.8}
+    xs = [j + gap_x[g] for j, (_, g, _, _) in enumerate(cols)]
+    ys, y, prev = [], 0.0, None
+    for r in m.itertuples():
+        if prev is not None and r.type != prev:
+            y += 0.4
+        ys.append(y)
+        y += 1
+        prev = r.type
+    fig, ax = plt.subplots(figsize=(5.5, 2.4))
+    neutral = "#f4f3f0"
+    for (i, r), yi in zip(enumerate(m.itertuples()), ys):
+        for j, (key, grp, head, kind) in enumerate(cols):
+            v = getattr(r, key)
+            faint = False
+            if v != v:                                   # not applicable on this stack
+                score, txt = None, "–"
+            elif kind == "ratio":
+                score, txt = math.log2(v), f"{v:.2f}×"
+            elif kind == "dppl":                         # +0.6 perplexity ~ a 4x slowdown on the colour scale
+                score, txt = -v * 3.3, _fmt_signed(v, 2)
+            else:                                        # accuracy points; colour only if significant
+                sig = bool(getattr(r, key + "_sig"))
+                score, txt, faint = (v * 1.1 if sig else 0.0), _fmt_signed(v, 1), not sig
+            fc = neutral if score is None else S.DIVERGING(0.5 + max(-2.0, min(2.0, score)) / 4)
+            ax.add_patch(plt.Rectangle((xs[j] - 0.47, yi - 0.45), 0.94, 0.9, facecolor=fc, edgecolor="white", lw=0.6))
+            dark = score is not None and abs(score) > 1.15
+            ax.text(xs[j], yi, txt, ha="center", va="center", fontsize=6.1,
+                    color="white" if dark else (S.MUTED if faint or score is None else S.INK),
+                    fontweight="bold" if (kind == "dacc" and not faint) else None)
+        stack = "vLLM" if r.backend == "vllm" else "HF"
+        ax.text(-0.62, yi, f"{r.method} · {stack}", ha="right", va="center", fontsize=6.3, color=S.INK)
+    # quantization-type brackets on the left
+    for typ in dict.fromkeys(m.type):
+        rows_t = [yi for yi, t in zip(ys, m.type) if t == typ]
+        y0, y1 = min(rows_t) - 0.4, max(rows_t) + 0.4
+        ax.plot([-3.75, -3.75], [y0, y1], color=S.TYPE_COLOR[typ], lw=2.2, solid_capstyle="butt")
+        ax.text(-3.9, (y0 + y1) / 2, f"{typ}", ha="right", va="center", fontsize=6.6, fontweight="bold",
+                color=S.TYPE_COLOR[typ])
+    # column headers: name and the condition it is measured in
+    sub = {"w_save": "saving", "kv_gain": "vLLM", "peak_save": "HF, 64K tok.", "ttft": "B=1, L=2K",
+           "tpot1": "B=1", "thr64": "B=64", "energy1": "per token", "dppl": "Δ", "dgsm": "Δ points",
+           "dmmlu": "Δ points"}
+    for j, (key, grp, head, _) in enumerate(cols):
+        ax.text(xs[j], -0.86, head, ha="center", va="bottom", fontsize=6.2, color=S.INK)
+        ax.text(xs[j], -0.52, sub[key], ha="center", va="bottom", fontsize=5.0, color=S.MUTED)
+    for grp in ("Memory", "Speed", "Quality"):
+        jj = [xs[j] for j, c in enumerate(cols) if c[1] == grp]
+        ax.text((min(jj) + max(jj)) / 2, -1.62, grp, ha="center", va="bottom", fontsize=7.2, fontweight="bold",
+                color=S.INK)
+        ax.plot([min(jj) - 0.45, max(jj) + 0.45], [-1.55, -1.55], color=S.AXIS, lw=0.8)
+    ax.set_xlim(-5.0, xs[-1] + 0.55)
+    ax.set_ylim(ys[-1] + 0.6, -2.25)
+    ax.axis("off")
+    key = [Patch(facecolor=S.DIVERGING(0.85), label="better than BF16"),
+           Patch(facecolor=neutral, edgecolor=S.AXIS, label="no clear change / not significant"),
+           Patch(facecolor=S.DIVERGING(0.15), label="worse than BF16"),
+           Patch(facecolor="white", edgecolor="white", label="–  not measured on this stack")]
+    fig.tight_layout(pad=0.2)
+    legend_below(fig, key, 4, fontsize=6, handlelength=1.4, columnspacing=1.1)
+    save(fig, "impact_matrix")
+
+
+def fig_speed_effects(size="7b", L=512):
+    """Report figure for Q2/Q3: speedup over BF16 (a) against bytes saved, (b) against batch size, (c) for prefill."""
     if SLIDES:
         return
     agg, _ = A.sweeps()
     sp = A.with_speedup(agg)
-    sp = sp[(sp["size"] == size) & (sp.output_len == 128) & (sp.tag == "grid") & (sp.input_len == L)]
-    hf, vl = A.loads()
-    if sp.empty or hf.empty or vl.empty:
-        return
-
-    def weights(b, p):
-        if b == "hf":
-            r = hf[(hf["size"] == size) & (hf.precision == p)]
-            return r.weights_bytes.iloc[0] if len(r) else np.nan
-        r = vl[(vl["size"] == size) & (vl.precision == p)]
-        return r.load_gib.iloc[0] if len(r) else np.nan
-
-    cfgs = [("hf", "int8"), ("hf", "nf4"), ("vllm", "fp8"), ("vllm", "gptq-int8"), ("vllm", "awq-int4")]
-    names = {("hf", "int8"): "HF LLM.int8()", ("hf", "nf4"): "HF NF4", ("vllm", "fp8"): "vLLM FP8 W8A8",
-             ("vllm", "gptq-int8"): "vLLM GPTQ-INT8", ("vllm", "awq-int4"): "vLLM AWQ-INT4"}
-    where = {("hf", "int8"): (7, 0, "left"), ("hf", "nf4"): (0, -13, "center"), ("vllm", "fp8"): (8, -10, "left"),
-             ("vllm", "gptq-int8"): (-6, 10, "right"), ("vllm", "awq-int4"): (-6, 11, "right")}
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(5.5, 2.0), sharey=True, gridspec_kw={"width_ratios": [1, 1.2]})
+    sp = sp[(sp["size"] == size) & (sp.output_len == 128) & (sp.tag == "grid")]
+    m = A.effect_matrix(size).set_index("precision")
+    cfgs = [("vllm", "fp8"), ("hf", "int8"), ("vllm", "gptq-int8"), ("vllm", "awq-int4"), ("hf", "nf4")]
+    short = {"fp8": "FP8", "int8": "LLM.int8()", "gptq-int8": "GPTQ-INT8", "awq-int4": "AWQ-INT4", "nf4": "NF4"}
+    where = {"int8": (6, 0, "left"), "nf4": (0, -10, "center"), "fp8": (6, -8, "left"),
+             "gptq-int8": (-4, 11, "right"), "awq-int4": (-5, 8, "right")}
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(5.5, 2.05), sharey=True,
+                                        gridspec_kw={"width_ratios": [1, 1.1, 0.95]})
     xs = np.geomspace(1, 3.2, 20)
     ax1.plot(xs, xs, color=S.INK2, lw=0.8, ls=(0, (4, 3)), zorder=1)
-    line_label = ax1.text(1.24, 1.4, "speedup = bytes saved", fontsize=5.8, color=S.INK2, ha="center", va="center",
-                          rotation_mode="anchor")
-    ax1.axhline(1, color=S.INK2, lw=0.6, ls=":", zorder=1)
+    line_label = ax1.text(1.21, 1.37, "speedup = bytes saved", fontsize=5.0, color=S.INK2, ha="center",
+                          va="center", rotation_mode="anchor")
     for b, p in cfgs:
-        ratio = weights(b, "bf16") / weights(b, p)
-        r = sp[(sp.backend == b) & (sp.precision == p) & (sp.batch == 1)]
-        if r.empty or np.isnan(ratio):
-            continue
-        y = r.speedup_tpot.iloc[0]
+        ratio, yv = m.loc[p, "w_save"], m.loc[p, "tpot1"]
         st = {k: v for k, v in S.style(b, p).items() if k not in ("label", "linestyle")}
-        ax1.plot([ratio], [y], ls="none", ms=5, zorder=3, **st)
-        dx, dy, ha = where[(b, p)]
-        ax1.annotate(f"{names[(b, p)]}\n{y:.2f}×", (ratio, y), xytext=(dx, dy), textcoords="offset points",
-                     fontsize=6, color=S.COLOR[p], ha=ha, va="center", linespacing=1.0)
+        ax1.plot([ratio], [yv], ls="none", ms=4.6, zorder=3, **st)
+        dx, dy, ha = where[p]
+        ax1.annotate(f"{short[p]}\n{yv:.2f}×", (ratio, yv), xytext=(dx, dy), textcoords="offset points",
+                     fontsize=5.5, color=S.COLOR[p], ha=ha, va="center", linespacing=1.0)
     ax1.set_xscale("log", base=2)
     ax1.set_xticks([1, 1.5, 2, 3])
     ax1.set_xticklabels(["1×", "1.5×", "2×", "3×"])
     ax1.minorticks_off()
     ax1.set_xlim(0.95, 3.3)
-    ax1.set_xlabel("weight memory saved vs. BF16")
-    ax1.set_ylabel("decode speedup vs. BF16")
-    ax1.set_title("(a) Speedup vs. bytes saved, B = 1", loc="left")
-
+    ax1.set_xlabel("weight memory saved")
+    ax1.set_ylabel("speedup over BF16")
+    ax1.set_title("(a) Decode, B = 1", loc="left")
     for b, p in cfgs:
-        r = sp[(sp.backend == b) & (sp.precision == p)].dropna(subset=["speedup_tpot"]).sort_values("batch")
-        if len(r):
-            ax2.plot(r.batch, r.speedup_tpot, **S.style(b, p))
-    ax2.axhline(1, color=S.INK2, lw=0.6, ls=":")
+        r = sp[(sp.backend == b) & (sp.precision == p) & (sp.input_len == L)].dropna(subset=["speedup_tpot"])
+        ax2.plot(r.sort_values("batch").batch, r.sort_values("batch").speedup_tpot, **S.style(b, p))
+        r = sp[(sp.backend == b) & (sp.precision == p) & (sp.batch == 1)].dropna(subset=["speedup_ttft"])
+        ax3.plot(r.sort_values("input_len").input_len, r.sort_values("input_len").speedup_ttft, **S.style(b, p))
     pow2_axis(ax2, [1, 4, 16, 64, 256])
     ax2.set_xlim(0.8, 256 * 1.3)
-    ax2.set_xlabel("batch size B")
-    ax2.set_title(f"(b) Decode speedup vs. batch size, L = {L}", loc="left")
+    ax2.set_xlabel(f"batch size B (L = {L})")
+    ax2.set_title("(b) Decode vs. batch", loc="left")
+    ax3.set_xscale("log", base=2)
+    ax3.set_xticks([128, 512, 2048])
+    ax3.set_xticklabels(["128", "512", "2048"])
+    ax3.minorticks_off()
+    ax3.set_xlim(110, 2400)
+    ax3.set_xlabel("prompt length L (B = 1)")
+    ax3.set_title("(c) Prefill (TTFT)", loc="left")
+    for ax in (ax1, ax2, ax3):
+        ax.axhline(1, color=S.INK2, lw=0.6, ls=":", zorder=1)
     ax1.set_yscale("log", base=2)
     ax1.set_yticks([0.25, 0.5, 1, 2, 4])
     ax1.set_yticklabels(["0.25×", "0.5×", "1×", "2×", "4×"])
     ax1.set_ylim(0.22, 4.2)
-    fig.tight_layout(w_pad=0.8)
+    fig.tight_layout(w_pad=0.6)
     p0, p1 = ax1.transData.transform([(1.5, 1.5), (2.5, 2.5)])
     line_label.set_rotation(math.degrees(math.atan2(p1[1] - p0[1], p1[0] - p0[0])))
-    legend_below(fig, [Line2D([], [], **{**S.style(b, p), "label": names[(b, p)]}) for b, p in cfgs], 5,
-                 handlelength=2.6, columnspacing=1.0, fontsize=6)
-    save(fig, "teaser_speedup")
+    legend_below(fig, [Line2D([], [], **S.style(b, p)) for b, p in cfgs], 5, handlelength=2.4,
+                 columnspacing=0.9, fontsize=5.8)
+    save(fig, "speed_effects")
+
+
+def _saving_bars(ax, size):
+    """Weight-memory saving of every configuration, grouped by quantization type, against the nominal ratio."""
+    m = A.effect_matrix(size)
+    x, ticks, labels = 0.0, [], []
+    for typ in dict.fromkeys(m.type):
+        g = m[m.type == typ]
+        x0 = x
+        for r in g.itertuples():
+            hf_ = r.backend == "hf"
+            ax.bar(x, r.w_save, 0.74, color="white" if hf_ else S.COLOR[r.precision], edgecolor=S.COLOR[r.precision],
+                   linewidth=1.0, hatch="////" if hf_ else None)
+            ax.text(x, r.w_save - 0.1, f"{r.w_save:.2f}×", ha="center", va="top", fontsize=5.6,
+                    color=S.INK if hf_ else "white", fontweight="bold",
+                    bbox=dict(facecolor="white", edgecolor="none", pad=0.5) if hf_ else None)
+            ticks.append(x)
+            labels.append(f"{r.method.replace('()', '').replace('-INT', '-')}\n{'HF' if hf_ else 'vLLM'}")
+            x += 1
+        nominal = 4 if typ == "W4A16" else 2
+        ax.plot([x0 - 0.45, x - 0.55], [nominal] * 2, color=S.INK, lw=0.9, ls=(0, (3, 2)))
+        ax.text((x0 + x - 1) / 2, nominal + 0.07, f"nominal {nominal}×", ha="center", va="bottom",
+                fontsize=5.6, color=S.INK)
+        ax.text((x0 + x - 1) / 2, -0.3, typ, transform=ax.get_xaxis_transform(), ha="center", va="top",
+                fontsize=6.4, fontweight="bold", color=S.TYPE_COLOR[typ])
+        x += 0.6
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(labels, fontsize=5.6, linespacing=0.95)
+    ax.set_ylim(0, 4.6)
+    ax.set_ylabel("weight-memory saving (×)")
+    ax.grid(axis="x", visible=False)
 
 
 # ----------------------------------------------------------------------------- Q1 memory
@@ -249,20 +346,15 @@ def _hf_saving(size):
 
 
 def fig_memory_main(size="7b"):
-    """Report figure for Q1: (a) weight memory of one model, naive vs measured; (b) what is left at run time."""
+    """Report figure for Q1: (a) weight-memory saving per config vs. the nominal ratio; (b) the saving at run time."""
     hf, vl = A.loads()
     if hf.empty or SLIDES:
         return
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(5.5, 1.95), gridspec_kw={"width_ratios": [1.12, 1]})
-    _weights_panel(ax1, size, hf, vl)
-    ax1.set_ylabel("weight memory (GB)")
-    ax1.set_title(f"(a) Weight memory, {SIZE_LABEL[size]}", loc="left")
-    ax1.legend(handles=[Patch(facecolor="white", edgecolor=S.INK2, hatch="////", label="HF + bitsandbytes"),
-                        Patch(facecolor=S.INK2, label="vLLM"),
-                        Line2D([], [], color=S.INK, lw=1.0, label="#params × bits / 8")],
-               loc="upper right", fontsize=5.6, handlelength=1.6, borderaxespad=0.2)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(5.5, 2.0), gridspec_kw={"width_ratios": [1.12, 1]})
+    _saving_bars(ax1, size)
+    ax1.set_title(f"(a) Weights, {SIZE_LABEL[size]}", loc="left")
     _saving_panel(ax2, size, _hf_saving(size), hf)
-    ax2.set_title("(b) Saving at run time (HF)", loc="left")
+    ax2.set_title("(b) Peak memory at run time (HF)", loc="left")
     fig.tight_layout(w_pad=1.2)
     save(fig, "q1_memory_main")
 
@@ -404,7 +496,11 @@ def fig_heatmaps(size="7b", metric="speedup_e2e"):
     fig, axes = plt.subplots(nrow, ncol, figsize=fsz((5.5, 1.18 * nrow), (10.2, 2.55 * nrow)), squeeze=False)
     lens = [128, 512, 1024, 2048]
     vmax = 2.0
-    for ax, (bk, p) in zip(axes.flat, panels):
+    flat = list(axes.flat)
+    if not SLIDES and len(panels) == 5:   # columns: W8A8 | W8A16 | W4A16; rows: vLLM | HF (no W8A16 on HF)
+        order = [flat[0], flat[1], flat[2], flat[3], flat[5]]
+        flat = order + [flat[4]]
+    for ax, (bk, p) in zip(flat, panels):
         r = sp[(sp.backend == bk) & (sp.precision == p)]
         batches = sorted(r.batch.unique())
         grid = np.full((len(lens), len(batches)), np.nan)
@@ -439,7 +535,7 @@ def fig_heatmaps(size="7b", metric="speedup_e2e"):
         ax.set_xlabel("batch size B", fontsize=8 * FS)
         if list(axes.flat).index(ax) % ncol == 0:
             ax.set_ylabel("prompt length L", fontsize=8 * FS)
-    spare = list(axes.flat)[len(panels):]
+    spare = flat[len(panels):]
     if not SLIDES:   # report: the spare panel holds a horizontal colour bar; the caption explains the cells
         fig.subplots_adjust(wspace=0.16, hspace=0.62)
         for ax in spare:
@@ -478,9 +574,9 @@ def fig_kernels(size="7b"):
         return
     peaks = A.hw_peaks()
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=fsz((5.5, 2.0), (8.6, 3.1)))
-    spec = [("bnb-int8", "hf", "int8", "bnb LLM.int8"), ("bnb-nf4", "hf", "nf4", "bnb NF4"),
-            ("fp8-w8a8", "vllm", "fp8", "FP8 W8A8 (CUTLASS)"), ("marlin-w8a16", "vllm", "gptq-int8", "Marlin W8A16"),
-            ("marlin-w4a16", "vllm", "awq-int4", "Marlin W4A16")]
+    spec = [("fp8-w8a8", "vllm", "fp8", "W8A8 FP8 (CUTLASS)"), ("bnb-int8", "hf", "int8", "W8A8 LLM.int8() (bnb)"),
+            ("marlin-w8a16", "vllm", "gptq-int8", "W8A16 (Marlin)"), ("marlin-w4a16", "vllm", "awq-int4", "W4A16 (Marlin)"),
+            ("bnb-nf4", "hf", "nf4", "W4A16 NF4 (bnb)")]
     for k, bk, p, name in spec:
         r = layer[layer.kernel == k].sort_values("m")
         if r.empty:
@@ -494,7 +590,7 @@ def fig_kernels(size="7b"):
                 m0, m1 = math.log2(r.m.iloc[i - 1]), math.log2(r.m.iloc[i])
                 mx = 2 ** (m0 + (0 - s[i - 1]) * (m1 - m0) / (s[i] - s[i - 1]))
                 ax1.plot([mx], [1.05], marker="|", ms=10 * FS, color=S.COLOR[p], mew=1.5)
-    ax1.axhline(1, color=S.BLUE, lw=1.0)
+    ax1.axhline(1, color=S.BASE, lw=1.0)
     if SLIDES:   # report: the legend's "BF16" entry names the 1x line
         ax1.text(1.1, 1.04, "BF16 cuBLAS", color=S.INK2, fontsize=7.5 * FS)
     ax1.set_xscale("log", base=2)
@@ -526,7 +622,7 @@ def fig_kernels(size="7b"):
         ax2.text(xr, peak_fp8 * 1.1, f"FP8 peak {peak_fp8:.0f} TFLOP/s", ha="right", fontsize=7 * FS, color=S.INK2)
     bpp = {"bf16": 2, "bnb-int8": 1, "bnb-nf4": 0.5625, "fp8-w8a8": 1, "marlin-w8a16": 1.016, "marlin-w4a16": 0.516}
     kshape = raw[raw.m.isin(layer.m.unique())]
-    for k, bk, p, name in [("bf16", "vllm", "bf16", "BF16")] + spec:
+    for k, bk, p, name in [("bf16", "vllm", "bf16", "BF16 (cuBLAS)")] + spec:
         r = kshape[kshape.kernel == k]
         if r.empty:
             continue
@@ -745,6 +841,8 @@ def fig_generalization():
         ax.axhline(1 if key.startswith("tpot") else 0, color=S.INK2, lw=0.8, ls=":")
         ax.set_xticks(x)
         ax.set_xticklabels([l for _, l in cfg], fontsize=None if SLIDES else 5.4, linespacing=0.95)
+        for t, (c, _) in zip(ax.get_xticklabels(), cfg):
+            t.set_color(S.COLOR[c])
         ax.set_ylabel(yl)
         ax.set_title(title)
         ax.grid(axis="x", visible=False)
@@ -856,7 +954,7 @@ def fig_quality():
                                     ha="right", va="top", fontsize=7.5 * FS, color=st["color"],
                                     arrowprops=dict(arrowstyle="-|>", color=st["color"], lw=1.0))
                     else:   # the empty top-right corner; the 3B points sit at the top left
-                        short = S.SHORT[(r.backend, r.precision)].replace("vLLM ", "")
+                        short = S.SHORT[(r.backend, r.precision)].split(" (")[0]
                         ax.annotate(f"{SIZE_LABEL[r['size']].split('-')[1]} {short}:\nPPL {r[col]:.1f}, off scale",
                                     xy=(r["mem"], cap), xytext=(r["mem"] * 1.15, cap * 0.93), ha="left", va="top",
                                     fontsize=5.8, color=st["color"], linespacing=1.0,

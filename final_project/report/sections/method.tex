@@ -10,34 +10,30 @@ FLOP/byte.
 
 \textbf{Models and configurations.} The main study uses instruction-tuned
 Qwen2.5~\cite{qwen2024qwen25} at 3B, 7B and 14B parameters; Qwen3-8B and Qwen3-32B~\cite{qwen3} test
-generality. \Cref{tab:configs} lists the eight configurations. The Hugging Face (HF) backend is what a
-user gets with one extra argument to \texttt{from\_pretrained}: bitsandbytes quantizes the BF16
-checkpoint while loading, and PyTorch runs the model eagerly. The vLLM backend serves the official
-Qwen GPTQ and AWQ checkpoints with Marlin kernels and converts BF16 weights to FP8 while loading. The
-embedding, the output layer (LM head) and the norms stay in 16 bits in every configuration.
+generality. \Cref{tab:configs} arranges the configurations by two choices: what is quantized, and
+which stack runs it. The Hugging Face (HF) stack is what a user gets with one extra argument to
+\texttt{from\_pretrained}: bitsandbytes quantizes the weights while loading, and PyTorch runs the
+model step by step. The vLLM stack is a serving engine with fused kernels and CUDA graphs. In every
+configuration the embedding, the output layer (LM head) and the norms stay in 16 bits.
 
 \begin{table}[t]
 \centering\small
-\caption{The eight configurations. W/A: bits of the weights and of the activations in the matrix
-multiply.}
+\caption{The six quantized configurations by what they quantize (columns) and the stack that runs
+them (rows); both stacks also run BF16. Figures use these colours; vLLM is solid/filled, HF dashed/hollow.}
 \label{tab:configs}
-\setlength{\tabcolsep}{4.5pt}
-\begin{tabular}{llllll}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llll}
 \toprule
-Backend & Name & W/A & Method & Kernel & Weights from \\
+ & \textcolor[HTML]{008300}{\textbf{W8A8}} & \textcolor[HTML]{D55181}{\textbf{W8A16}} & \textcolor[HTML]{C98500}{\textbf{W4A16}} \\
+Stack & 8-bit weights + activations & 8-bit weights & 4-bit weights \\
 \midrule
-HF   & BF16      & 16/16           & ---            & cuBLAS                 & BF16 checkpoint \\
-HF   & INT8      & 8/8$^{\dagger}$ & LLM.int8()     & bitsandbytes, cuBLASLt & quantized on load \\
-HF   & NF4       & 4/16            & NF4, block 64  & bitsandbytes           & quantized on load \\
-vLLM & BF16      & 16/16           & ---            & cuBLAS                 & BF16 checkpoint \\
-vLLM & FP8       & 8/8             & FP8 E4M3       & CUTLASS                & quantized on load \\
-vLLM & GPTQ-INT8 & 8/16            & GPTQ, group 128 & Marlin                & Qwen checkpoint \\
-vLLM & AWQ-INT4  & 4/16            & AWQ, group 128  & Marlin                & Qwen checkpoint \\
-vLLM & GPTQ-INT4 & 4/16            & GPTQ, group 128 & Marlin                & Qwen checkpoint \\
+HF + bitsandbytes & LLM.int8()$^{\dagger}$ & --- & NF4 \\
+vLLM + fused kernels & FP8 (CUTLASS) & GPTQ-INT8 (Marlin) & AWQ-, GPTQ-INT4 (Marlin) \\
 \bottomrule
 \end{tabular}
-\par\vspace{3pt}\parbox{\linewidth}{\scriptsize $^{\dagger}$Activation columns with values above 6.0
-are multiplied in FP16.}
+\par\vspace{3pt}\parbox{\linewidth}{\scriptsize $^{\dagger}$INT8, with activation columns above 6.0
+kept in FP16. bitsandbytes (NF4: block 64) and FP8 (E4M3) quantize while loading; GPTQ and AWQ use the
+official Qwen checkpoints (group size 128).}
 \end{table}
 
 \textbf{Workloads.} \emph{Controlled sweep:} each configuration generates exactly 128 tokens for

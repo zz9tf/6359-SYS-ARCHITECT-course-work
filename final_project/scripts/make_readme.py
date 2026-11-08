@@ -30,40 +30,43 @@ def main():
     m = macros()
     findings = f"""## Key findings
 
-![The bit-width does not predict the speedup](figures/teaser_speedup.png)
+![What each quantization configuration does to each metric](figures/impact_matrix.png)
 
-1. **Memory — smaller, but not 4× smaller.** Only the decoder's linear layers shrink; the embedding,
-   LM head, norms and quantization scales stay 16-bit. On Qwen2.5-7B, 4-bit weights save
-   **{m['WtNFSeven']}** (NF4) to **{m['WtAWQSeven']}** (AWQ) instead of 4×, and INT8 **{m['WtIntEightSeven']}** instead of 2×.
-   At run time the KV cache and activations are not quantized: at 32 × 2048-token prompts the
-   end-to-end saving falls to **{m['MemBigNF']}** (NF4) and **{m['MemBigInt']}** (LLM.int8(), whose activation
-   workspace is {m['ActIntRatio']} that of BF16).
-2. **Speed depends on the kernel, not the bit-width.** At batch size 1 the 7B model's 8-bit weights
-   decode **{m['GPTQeightspeedup']} faster** than BF16 with vLLM's Marlin kernel but **{m['INTeightslowdown']} slower** with
-   bitsandbytes LLM.int8(); its 4-bit weights decode **{m['AWQspeedup']} faster** with Marlin (AWQ) but only
-   {m['NFsevenB']} faster with bitsandbytes NF4, which is {m['NFthreeslow']} slower on the host-bound 3B model.
-3. **Weight-only gains vanish in the compute-bound regime.** AWQ-INT4 stops winning around
-   **B ≈ {m['AWQcross']}** (512-token prompts) and never shortens prefill; **FP8 W8A8 is faster in every
-   cell** ({m['FPminEtoE']}–{m['FPmaxEtoE']} end to end) and delivers **{m['ThrFPratio']}** the BF16 throughput at B = 256.
-4. **The mechanism is visible at kernel level.** On the measured roofline, 4-bit weights quadruple
-   arithmetic intensity, so Marlin W4A16 is {m['MarlinFourMone']} faster than cuBLAS at M = 1 and crosses over at
-   M ≈ {m['MarlinFourCross']}; LLM.int8() keeps the GPU busy only {m['BusyIntone']}% of a decode step (BF16: {m['BusyBFone']}%).
-5. **Energy follows latency.** At batch size 1, AWQ-INT4 needs {m['EnAWQone']} J per token against
-   {m['EnBFone']} J for BF16; at B = 256 the GPU is power-capped and only FP8 still saves energy.
-6. **Quality (GSM8K, MMLU, perplexity; paired McNemar tests).** {m.get('QualityReadme', 'See the report.')}
-7. **One quality metric is not enough.** The 14B GPTQ-INT4 checkpoint keeps its GSM8K and MMLU scores
-   but has a WikiText-2 perplexity of {m.get('PPLGPTQFourFourteen', '?')} (others: {m.get('PPLOthersFourteen', '?')}): it predicts the next
-   token of raw text correctly only {m.get('TopOneGPTQWiki', '?')}% of the time ({m.get('TopOneOthersWiki', '?')}% for the other formats), but
-   {m.get('TopOneGPTQChat', '?')}% on chat-formatted text, like the others.
-8. **The results carry over to Qwen3-8B.** AWQ-INT4 decodes {m.get('FamRAWQone', '?')} faster at batch 1 (Qwen2.5-7B:
-   {m.get('FamQAWQone', '?')}), FP8 {m.get('FamRFPone', '?')}, LLM.int8() runs at {m.get('FamRINTone', '?')}; NF4 is {m.get('FamRNFone', '?')} on the
-   36-layer model, again because the decode step is host-bound.
-9. **Quantization makes a 32B model possible.** Qwen3-32B needs {m.get('BigBFw', '?')} GB in BF16 and runs on this GPU only at
-   4 bits: AWQ-INT4 takes {m.get('BigAWQw', '?')} GB, decodes at {m.get('BigAWQtpot', '?')} ms/token (Qwen3-8B BF16: {m.get('SmallBFtpot', '?')} ms)
-   and scores {m.get('BigGSMawq', '?')}% / {m.get('BigMMLUawq', '?')}% on GSM8K / MMLU against {m.get('SmallGSMbf', '?')}% / {m.get('SmallMMLUbf', '?')}% for
-   Qwen3-8B in BF16 ({m.get('SmallBFw', '?')} GB).
+The figure reads from left to right, and each finding limits the next one.
+
+1. **Memory: quantization saves bytes, but fewer than the bit-width suggests.** Only the decoder's
+   linear layers shrink; the embedding, LM head and scales stay 16-bit. So on Qwen2.5-7B, 4-bit weights
+   save **{m['WtNFSeven']}** (NF4) to **{m['WtAWQSeven']}** (AWQ), not 4×, and 8-bit weights **{m['WtIntEightSeven']}**, not 2×. At run time
+   the KV cache and activations are not quantized, so with 32 × 2048-token prompts the total saving falls
+   to **{m['MemBigNF']}** (NF4) and **{m['MemBigInt']}** (LLM.int8()). The saved memory pays off as capacity: vLLM holds
+   **{m['KVratioAWQ']}** more KV-cache tokens with AWQ-INT4.
+2. **Small batches: the saved bytes become speed only with a fused kernel.** At batch size 1, decoding is
+   memory-bound, so fewer bytes should mean less time. On vLLM they do: AWQ-INT4 decodes **{m['AWQspeedup']}**
+   faster, GPTQ-INT8 {m['GPTQeightspeedup']}, FP8 {m['FPeightspeedup']} ({m['IdealAWQ']}–{m['IdealGQE']}% of their byte savings). With bitsandbytes they
+   do not: NF4 is only {m['NFsevenB']} faster, and LLM.int8() is **{m['INTeightslowdown']} slower**.
+3. **Large batches: the gain lasts only while decoding is memory-bound.** Batching makes decoding
+   compute-bound, so weight-only gains fade and vanish near **B ≈ {m['AWQcross']}** (AWQ-INT4, 512-token prompts).
+   Only **FP8 W8A8**, which also halves the compute, stays faster in every cell ({m['FPminEtoE']}–{m['FPmaxEtoE']}) and
+   gives **{m['ThrFPratio']}** the BF16 throughput at B = 256.
+4. **Why: the roofline and the host.** Marlin W4A16 is {m['MarlinFourMone']} faster than cuBLAS at M = 1 and loses its
+   gain at M ≈ {m['MarlinFourCross']}, where it hits the same BF16 compute roof. On HF, kernel launches on the CPU
+   dominate: the GPU is busy only {m['BusyIntone']}% of an LLM.int8() decode step (BF16: {m['BusyBFone']}%).
+5. **Quality: small cost at 8 bits, moderate at 4 bits.** GPTQ-INT8 and FP8 stay within {m['EightKernMax']} points of BF16
+   on GSM8K and MMLU. 4-bit formats cost {m['MFourAbsMin']}–{m['MFourAbsMax']} MMLU points, most on the 3B model, where GSM8K
+   drops as well ({m['DFourMinThree']} to {m['DFourMaxThree']} points).
+6. **So spend the saved memory on parameters.** Qwen2.5-14B in AWQ-INT4 ({m['QualityGuide'].split('needs ')[1].split(' of')[0]}) beats Qwen2.5-7B
+   in BF16, and Qwen3-32B, which fits this GPU only in 4 bits ({m.get('BigAWQw', '?')} GB), scores
+   **{m.get('BigGSMawq', '?')}% / {m.get('BigMMLUawq', '?')}%** on GSM8K / MMLU against {m.get('SmallGSMbf', '?')}% / {m.get('SmallMMLUbf', '?')}% for Qwen3-8B in BF16 ({m.get('SmallBFw', '?')} GB).
+7. **The systems effects generalize; the quality order does not.** On Qwen3-8B, AWQ-INT4 decodes
+   {m.get('FamRAWQone', '?')} faster (Qwen2.5-7B: {m.get('FamQAWQone', '?')}), and NF4 falls to {m.get('FamRNFone', '?')} on the 36-layer model (host-bound).
+   But there FP8 costs as much MMLU as AWQ-INT4, so quality must be checked per model, and with more than
+   one metric: the 14B GPTQ-INT4 checkpoint keeps its task scores but has a perplexity of {m.get('PPLGPTQFourFourteen', '?')}.
 """
     results = f"""## Results at a glance
+
+**Overview — effect of each quantized configuration on each metric, Qwen2.5-7B (vs. BF16 on the same stack)**
+
+{md_table('quantization_effects')}
 
 **Q1 — weight memory (GB)**
 
@@ -76,7 +79,7 @@ def main():
 
 {md_table('t_speed')}
 
-![latency](figures/q2_latency_throughput.png)
+![speed](figures/speed_effects.png)\n![latency](figures/q2_latency_throughput.png)
 
 **Q3 — where each format stops winning (speedup over BF16 on the same backend)**
 

@@ -7,20 +7,21 @@ beats Qwen3-8B in BF16.}
 \label{fig:general}
 \end{figure}
 
-\answer{The systems results carry over to a newer model family. The quality order of the formats
-does not, so it must be measured for each model.}
+\answer{The systems effects carry over to a newer model family. The quality order of the formats does
+not, so it must be measured for each model.}
 
-\textbf{Qwen3-8B} has \FamRLayers{} layers and \FamRKVheads{} KV heads (Qwen2.5-7B: \FamQLayers{} and
-\FamQKVheads) and runs in non-thinking mode. The systems results carry over (\cref{fig:general}a,
-\cref{app:general}): at batch size~1, AWQ-INT4 decodes \FamRAWQone{} faster than BF16 (Qwen2.5-7B:
-\FamQAWQone), FP8 \FamRFPone{}, and LLM.int8() runs at \FamRINTone{} of the BF16 speed. The one
-difference supports the host-overhead explanation: NF4, \FamQNFone{} faster on the 28-layer
-Qwen2.5-7B, runs at \FamRNFone{} of the BF16 speed on the 36-layer Qwen3-8B. \FamQualitySentence
+\textbf{Qwen3-8B.} If the speed effects come from the hardware and the kernels, they should not depend
+on the model. Qwen3-8B tests this with a different shape: \FamRLayers{} layers and \FamRKVheads{} KV
+heads, against \FamQLayers{} and \FamQKVheads{} for Qwen2.5-7B. The systems effects carry over
+(\cref{fig:general}a, \cref{app:general}): at batch size~1, AWQ-INT4 decodes \FamRAWQone{} faster than
+BF16 (Qwen2.5-7B: \FamQAWQone), FP8 \FamRFPone, and LLM.int8() runs at \FamRINTone{} of the BF16 speed.
+The one change confirms the host-overhead explanation: with more layers, NF4 falls from \FamQNFone{} to
+\FamRNFone{} of the BF16 speed. Quality, in contrast, depends on the weights rather than on the
+kernels. \FamQualitySentence
 
-\textbf{Qwen3-32B} raises a different question: does the model fit at all? Its BF16 weights need
-\BigBFw\,GB and 8-bit weights about half of that, more than the GPU's 32\,GB, so it runs only in 4
-bits (AWQ-INT4: \BigAWQw\,GB plus \BigAWQkv{} cached tokens; NF4: \BigNFw\,GB). Compared with
-Qwen3-8B in BF16 (\SmallBFw\,GB; \cref{fig:general}c), it needs \BigAWQtpot{} vs.\ \SmallBFtpot\,ms per
-token at batch size~1 and scores \BigGSMawq\% vs.\ \SmallGSMbf\% on GSM8K (\BigGAWQp) and
-\BigMMLUawq\% vs.\ \SmallMMLUbf\% on MMLU (\BigMAWQp). \BigVerdict{} (With the checkpoint's FP16
-activations, \BigNaNwin{} perplexity windows overflow; BF16 activations fix this.)
+\textbf{Qwen3-32B.} The last step of the chain, spending memory on parameters, matters most when a
+model would not fit otherwise. Qwen3-32B needs \BigBFw\,GB in BF16 and about half of that in 8 bits,
+more than the GPU's 32\,GB, so on this GPU it runs only in 4 bits (AWQ-INT4: \BigAWQw\,GB plus
+\BigAWQkv{} cached tokens). Compared with Qwen3-8B in BF16 (\SmallBFw\,GB), it costs \BigAWQtpot{} vs.\
+\SmallBFtpot\,ms per token, but it scores \BigGSMawq\% vs.\ \SmallGSMbf\% on GSM8K (\BigGAWQp) and
+\BigMMLUawq\% vs.\ \SmallMMLUbf\% on MMLU (\BigMAWQp; \cref{fig:general}c). \BigVerdict{}

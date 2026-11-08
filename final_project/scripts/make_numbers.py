@@ -126,6 +126,7 @@ def main():
     putx("TTFTnfSlow", 1 / cell("hf", "7b", "nf4", 1, 512, "speedup_ttft"), 2)
     putx("TTFTfpLong", cell("vllm", "7b", "fp8", 1, 2048, "speedup_ttft"), 2)
     putx("TTFTintLong", cell("hf", "7b", "int8", 16, 2048, "speedup_ttft"), 2)
+    putx("TTFTintLongOne", cell("hf", "7b", "int8", 1, 2048, "speedup_ttft"), 2)
     tb = cell("vllm", "7b", "bf16", 1, 512, "tpot")
     put("TPOTbfVllmSeven", tb * 1e3, "{:.2f}")
     floor = hfw.loc[("7b", "bf16")].weights_bytes / (bw * 1e12) if ok(bw) and ("7b", "bf16") in hfw.index else float("nan")

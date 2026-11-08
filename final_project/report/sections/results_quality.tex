@@ -2,43 +2,39 @@
 \centering
 \includegraphics[width=\linewidth]{q4_quality_vs_memory}
 \caption{\textbf{Q4: quality against weight memory} for every Qwen2.5 configuration. Lines connect the
-configurations of one model size; hollow markers: HF, filled: vLLM. A larger model in 4 bits beats a
-smaller model in 16 bits at less memory.}
+configurations of one model size; colours and markers follow the quantization type
+(\cref{tab:configs}). A larger model in 4 bits sits above a smaller model in 16 bits, at less memory.}
 \label{fig:quality}
 \end{figure}
 
-\answer{8-bit formats keep quality. 4-bit formats cost a small but real amount, more on smaller
-models. At a fixed memory budget, a larger 4-bit model is still the better choice.}
+\answer{8-bit formats keep quality. 4-bit formats cost a little, most on small models. The saved
+memory is therefore best spent on a larger model.}
 
-\textbf{Noise floor.} \Cref{tab:quality_main} reports perplexity, multi-step math (GSM8K) and
-knowledge (MMLU). Even BF16 on two backends disagrees: the kernels round differently, and greedy
-decoding turns tiny differences into different reasoning chains. vLLM and HF disagree on
-\BackendFlipsSeven{} of the 7B model's GSM8K answers, yet their accuracies differ by only
-\BackendNoiseSeven{} points (MMLU: \MBackendNoiseSeven). Differences this small are not caused by
-quantization.
+\textbf{Noise floor.} The memory and speed gains are worth only as much as the quality they keep. To
+judge a change, we first need the noise floor. BF16 on the two stacks disagrees on
+\BackendFlipsSeven{} of the 7B model's GSM8K answers, because different kernels round differently, yet
+the accuracies differ by only \BackendNoiseSeven{} points (MMLU: \MBackendNoiseSeven).
 
-\textbf{8-bit formats keep quality.} GPTQ-INT8 and FP8 stay within \EightKernMax{} points of BF16 on
-both benchmarks for all three sizes. On GSM8K, \EightSentence. The only measurable 8-bit cost is
-LLM.int8() on the 3B model (\IntMMLUThree{} MMLU points, \IntMMLUpThree).
+\textbf{8 bits keep quality.} Measured against this floor, 8-bit formats show no loss. GPTQ-INT8 and
+FP8 stay within \EightKernMax{} points of BF16 on both benchmarks for all three sizes; on GSM8K,
+\EightSentence{} (\cref{tab:quality_main}). The only measurable 8-bit cost is LLM.int8() on the 3B
+model (\IntMMLUThree{} MMLU points, \IntMMLUpThree).
 
-\textbf{4-bit formats cost quality, most on small models.} The 4-bit formats change MMLU accuracy by
-\MDFourMinThree{} to \MDFourMaxThree{} points on 3B, \MDFourMinSeven{} to \MDFourMaxSeven{} on 7B and
-\MDFourMinFourteen{} to \MDFourMaxFourteen{} on 14B; \MSigFourThree, \MSigFourSeven{} and
-\MSigFourFourteen{} of these drops stay significant after the correction. On GSM8K, only the 3B model
-clearly loses accuracy (\DFourMinThree{} to \DFourMaxThree{} points). A smaller model has less spare
-capacity to absorb the rounding error.
+\textbf{4 bits cost a little.} Removing four more bits does cost quality. The 4-bit formats change
+MMLU accuracy by \MDFourMinSeven{} to \MDFourMaxSeven{} points on 7B and \MDFourMinFourteen{} to
+\MDFourMaxFourteen{} on 14B. The cost is largest on the smallest model: \MDFourMinThree{} to
+\MDFourMaxThree{} points on 3B, where GSM8K drops as well (\DFourMinThree{} to \DFourMaxThree). A small
+model has less spare capacity to absorb the rounding error.
 
-\textbf{Model size matters more than bit-width.} \QualityGuide{} At a fixed memory budget, parameters
-are worth more than bits (\cref{fig:quality}), as the scaling laws of Dettmers and
-Zettlemoyer~\cite{dettmers2023case} predict.
+\textbf{More parameters beat more bits.} This cost is smaller than the gain from a larger model, so at a
+fixed memory budget parameters are worth more than bits (\cref{fig:quality}), as the scaling laws of
+Dettmers and Zettlemoyer~\cite{dettmers2023case} predict. \QualityGuide{}
 
-\textbf{One metric is not enough.} The 14B GPTQ-INT4 checkpoint matches the other 14B formats on
-GSM8K (\AccGPTQFourFourteenPct\%) and MMLU (\MGPTQFourFourteen{} points), but its WikiText-2
-perplexity is \PPLGPTQFourFourteen{} instead of \PPLOthersFourteen. The effect is real (it remains with
-BF16 activations and appears at every position). The checkpoint ranks the correct next token first
-for only \TopOneGPTQWiki\% of raw WikiText tokens (other 14B formats: \TopOneOthersWiki\%), but for
-\TopOneGPTQChat\% of chat-formatted GSM8K answers (others: \TopOneOthersChat\%): it keeps the chat
-format it serves but has lost much of its general language modeling. Task benchmarks alone would miss
-this; perplexity alone would reject a checkpoint that works for chat.
+\textbf{One metric is not enough.} The 14B GPTQ-INT4 checkpoint keeps its task accuracy
+(\AccGPTQFourFourteenPct\% on GSM8K), yet its WikiText-2 perplexity is \PPLGPTQFourFourteen{} instead of
+\PPLOthersFourteen. It ranks the correct next token first for only \TopOneGPTQWiki\% of raw WikiText
+tokens (other 14B formats: \TopOneOthersWiki\%), but for \TopOneGPTQChat\% of chat-formatted answers
+(others: \TopOneOthersChat\%). The checkpoint still serves chat well but has lost much of its general
+language modeling, which any single metric would miss.
 
 \input{tables/t_quality_main}

@@ -1,8 +1,7 @@
 \section{Discussion}
 \label{sec:discussion}
 
-\textbf{A decision guide.} \Cref{tab:guide} turns the results into rules; in each, the kernel and the
-regime decide, not the bit-width.
+\textbf{A decision guide.} \Cref{tab:guide} turns each link of the chain into a rule.
 
 \begin{table}[t]
 \centering\footnotesize
@@ -14,32 +13,34 @@ regime decide, not the bit-width.
 Situation & Choice & Evidence \\
 \midrule
 Planning memory & Use the real ratio, not $16/b$ & 4-bit saves only \WtNFSeven--\WtAWQSeven{} (\S\ref{sec:q1}) \\
-Model does not fit & 4-bit weights & Qwen3-32B fits 32\,GB only in 4 bits (\S\ref{sec:general}) \\
 Few users ($B\lesssim16$) & AWQ/GPTQ-INT4, fused kernels & \AWQspeedup{} faster decode (\S\ref{sec:q2}) \\
 Many users ($B\gtrsim64$) & FP8 W8A8 & Faster at every $B$; \ThrFPratio{} throughput (\S\ref{sec:q3}) \\
-Fixed memory budget & Larger model in 4 bits & 14B AWQ-INT4 beats 7B BF16 (\S\ref{sec:q4}) \\
+Tight memory budget & Larger model in 4 bits & 4-bit 32B beats BF16 8B (\S\ref{sec:general}) \\
 Small model, accuracy first & 8-bit (FP8, GPTQ-INT8) & 4-bit costs up to \MFourAbsMax{} MMLU points (\S\ref{sec:q4}) \\
 Only HF + bitsandbytes & Quantize for memory, not speed & LLM.int8() is \INTeightslowdown{} slower (\S\ref{sec:mechanism}) \\
-New checkpoint & Check perplexity \emph{and} tasks & One checkpoint fails only on raw text (\S\ref{sec:q4}) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Lessons for system design.} (1)~Weight-only formats save bandwidth but not compute; in the
-compute-bound regime only formats that tensor cores run natively (FP8 here, FP4 on the newest GPUs)
-help. (2)~The software stack matters as much as the format. (3)~With 4-bit weights, the KV cache
-dominates memory at long contexts, so KV-cache quantization~\cite{liu2024kivi,hooper2024kvquant} is
-the natural next step.
+\textbf{Lessons for system design.} Weight-only formats save bandwidth but not compute, so to stay
+fast at large batches the math itself must run in low precision, as FP8 does here and FP4 can on the
+newest GPUs. Even then, the speedup reaches the user only through a fused kernel and a decode loop with
+few launches, so the software stack matters as much as the format. And once the weights are in 4 bits,
+the KV cache is the largest 16-bit user of memory, which makes KV-cache
+quantization~\cite{liu2024kivi,hooper2024kvquant} the next step.
 
 \input{sections/limitations}
 
 \section{Conclusion}
 \label{sec:conclusion}
-On one consumer GPU, the bit-width alone predicts neither the memory a quantization format saves,
-nor its speed, nor its quality cost. Memory savings are real but smaller than advertised. Speed
-depends on the implementation and the regime: fused weight-only kernels win at small batches, FP8 at
-every batch size. Quality costs grow as bits and model size shrink, yet a larger 4-bit model beats a smaller
-16-bit one. Smaller is not always faster, but with the right kernel in the right regime, it is both.
+Quantization changes memory, speed and quality, and on one consumer GPU each change limits the next.
+4-bit weights save only \WtNFSeven--\WtAWQSeven, and less at run time, because the embedding, the KV
+cache and the activations stay in 16 bits. The saved bytes become speed only while decoding is
+memory-bound and a fused kernel hides the dequantization (\AWQspeedup{} on vLLM, \NFsevenB{} with
+bitsandbytes). Batching ends that regime near batch size \AWQcross; after it, only FP8, which also
+halves the compute, stays faster. The quality cost is small at 8 bits and \MFourAbsMin--\MFourAbsMax{}
+MMLU points at 4 bits, less than the gain from a larger model. Quantization therefore pays off most as
+a way to run a larger model: smaller is not always faster, but it can be both smaller and better.
 
 \section*{Author contributions}
 Sijia Zhong built the harness and the memory study (Q1), Zheng Zheng ran the sweeps and the kernel

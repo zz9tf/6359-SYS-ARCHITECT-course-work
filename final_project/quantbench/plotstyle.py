@@ -1,10 +1,12 @@
 """Shared figure style.
 
-Colour encodes the weight format and follows it across every figure (validated as a set:
-all-pairs normal-vision dE >= 19, CVD dE >= 6.9, contrast >= 3:1 on white). Because the
-amber/green pair sits in the CVD warning band, every format also has its own marker, and lines
-are direct-labelled. Line style encodes the backend: solid = vLLM (fused kernels),
-dashed = Hugging Face + bitsandbytes.
+Colour and marker encode the quantization type, so a reader can map every series to what is
+quantized: W8A8 (8-bit weights and activations: FP8, LLM.int8()) green diamonds, W8A16 (8-bit
+weights: GPTQ-INT8) magenta squares, W4A16 (4-bit weights: AWQ, GPTQ-INT4, NF4) amber triangles,
+and the BF16 baseline grey circles. The software stack is the second channel: solid lines with
+filled markers are vLLM (fused kernels), dashed lines with hollow markers are Hugging Face +
+bitsandbytes. The colours were validated as a set (all-pairs normal-vision dE >= 19, CVD dE >= 6.9,
+contrast >= 3:1 on white).
 """
 from pathlib import Path
 
@@ -16,25 +18,29 @@ INK, INK2, MUTED = "#0b0b0b", "#52514e", "#898781"
 GRID, AXIS = "#e1e0d9", "#c3c2b7"
 
 BLUE, GREEN, MAGENTA, AMBER = "#2a78d6", "#008300", "#d55181", "#c98500"
-COLOR = {"bf16": BLUE, "fp8": GREEN, "int8": MAGENTA, "gptq-int8": MAGENTA,
-         "nf4": AMBER, "awq-int4": AMBER, "gptq-int4": AMBER}
-MARKER = {"bf16": "o", "fp8": "D", "int8": "s", "gptq-int8": "s", "nf4": "^", "awq-int4": "^", "gptq-int4": "v"}
+BASE = "#5f5e5a"     # BF16 baseline
+TYPE = {"bf16": "BF16", "fp8": "W8A8", "int8": "W8A8", "gptq-int8": "W8A16",
+        "awq-int4": "W4A16", "gptq-int4": "W4A16", "nf4": "W4A16"}
+TYPE_COLOR = {"BF16": BASE, "W8A8": GREEN, "W8A16": MAGENTA, "W4A16": AMBER}
+TYPE_NAME = {"W8A8": "8-bit weights + activations", "W8A16": "8-bit weights", "W4A16": "4-bit weights"}
+COLOR = {p: TYPE_COLOR[t] for p, t in TYPE.items()}
+MARKER = {"bf16": "o", "fp8": "D", "int8": "D", "gptq-int8": "s", "nf4": "^", "awq-int4": "^", "gptq-int4": "v"}
 LINESTYLE = {"vllm": "-", "hf": (0, (4, 2))}
 
 LABEL = {
-    ("hf", "bf16"): "HF BF16",
-    ("hf", "int8"): "HF INT8 (bnb LLM.int8)",
-    ("hf", "nf4"): "HF NF4 (bnb)",
-    ("vllm", "bf16"): "vLLM BF16",
-    ("vllm", "fp8"): "vLLM FP8 W8A8",
-    ("vllm", "gptq-int8"): "vLLM INT8 W8A16 (GPTQ)",
-    ("vllm", "awq-int4"): "vLLM INT4 W4A16 (AWQ)",
-    ("vllm", "gptq-int4"): "vLLM INT4 W4A16 (GPTQ)",
+    ("hf", "bf16"): "BF16 (HF)",
+    ("hf", "int8"): "W8A8 LLM.int8() (HF)",
+    ("hf", "nf4"): "W4A16 NF4 (HF)",
+    ("vllm", "bf16"): "BF16 (vLLM)",
+    ("vllm", "fp8"): "W8A8 FP8 (vLLM)",
+    ("vllm", "gptq-int8"): "W8A16 GPTQ (vLLM)",
+    ("vllm", "awq-int4"): "W4A16 AWQ (vLLM)",
+    ("vllm", "gptq-int4"): "W4A16 GPTQ (vLLM)",
 }
 SHORT = {
-    ("hf", "bf16"): "HF BF16", ("hf", "int8"): "HF INT8", ("hf", "nf4"): "HF NF4",
-    ("vllm", "bf16"): "vLLM BF16", ("vllm", "fp8"): "vLLM FP8", ("vllm", "gptq-int8"): "vLLM INT8",
-    ("vllm", "awq-int4"): "vLLM AWQ-4", ("vllm", "gptq-int4"): "vLLM GPTQ-4",
+    ("hf", "bf16"): "BF16 (HF)", ("hf", "int8"): "LLM.int8() (HF)", ("hf", "nf4"): "NF4 (HF)",
+    ("vllm", "bf16"): "BF16 (vLLM)", ("vllm", "fp8"): "FP8 (vLLM)", ("vllm", "gptq-int8"): "GPTQ-INT8 (vLLM)",
+    ("vllm", "awq-int4"): "AWQ-INT4 (vLLM)", ("vllm", "gptq-int4"): "GPTQ-INT4 (vLLM)",
 }
 
 # Diverging map for speedup (log2 scale): red = slower than BF16, neutral grey = parity, blue = faster.

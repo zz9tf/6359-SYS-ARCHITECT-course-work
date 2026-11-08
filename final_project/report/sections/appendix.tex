@@ -36,7 +36,7 @@ cache and activations. OOM: out of memory.}
 \section{Additional speed results}
 \label{app:speed}
 
-\Cref{tab:speed} lists the latency, throughput and energy numbers behind \cref{fig:latency}, and
+\Cref{tab:speed,fig:latency} give the absolute latency, throughput and energy behind \cref{fig:speed}, and
 \cref{tab:crossover} lists where each format stops paying off (\cref{fig:heatmaps}).
 \Cref{fig:energy} shows the energy per output token. GPU power stays close to the board limit in
 every configuration (\PowerRange\,W), so energy per token follows latency. LLM.int8() draws little
@@ -45,6 +45,15 @@ shows how the answer length moves the speedup (\cref{sec:q3}).
 
 \input{tables/t_speed}
 \input{tables/t_crossover}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{q2_latency_throughput}
+\caption{Absolute latency and throughput of Qwen2.5-7B with 128 generated tokens: (a)~TTFT of one
+request, (b)~TPOT and (c)~output throughput for 512-token prompts. \Cref{fig:speed} shows the same data
+as speedups over BF16.}
+\label{fig:latency}
+\end{figure}
 
 \begin{figure}[htbp]
 \centering

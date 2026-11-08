@@ -1,17 +1,17 @@
 \begin{abstract}
 Quantization stores the weights of a large language model (LLM) in 8 or 4 bits instead of 16, and
-formats are usually compared by their bit-width. We show that the bit-width alone predicts neither the
-memory a format saves, nor its speed, nor its cost in quality. On one NVIDIA RTX 5090, we measure
-eight configurations on two inference stacks (Hugging Face Transformers with bitsandbytes, and vLLM)
-for five models from 3B to 32B parameters, with \NumMeasurements{} timed runs, real chat traffic and
-three quality benchmarks. (1)~4-bit weights make a
-7B model \WtNFSeven--\WtAWQSeven{} smaller, not $4\times$, and the total saving falls to \MemBigNF{}
-as the KV cache grows. (2)~The implementation matters more than the bit-width: 8-bit weights decode
-\GPTQeightspeedup{} faster than BF16 as GPTQ-INT8 on vLLM, but \INTeightslowdown{} slower as
-LLM.int8() in bitsandbytes. (3)~Weight-only formats lose their speedup once batching makes decoding compute-bound,
-as a roofline model predicts, while FP8 stays faster at every batch size. (4)~8-bit formats keep
-quality, and 4-bit formats cost \MFourAbsMin--\MFourAbsMax{} MMLU points, more on smaller models.
-Still, a larger 4-bit model beats a smaller 16-bit one: Qwen3-32B in 4 bits scores \BigMMLUawq\% on
-MMLU against \SmallMMLUbf\% for Qwen3-8B in BF16, with only \BigMemRatio{} the weight memory. Kernel
-benchmarks, a roofline model and GPU profiles explain each result.
+formats are usually compared by this bit-width. We show that the bit-width alone predicts neither the
+memory a format saves, nor its speed, nor its cost in quality. On one NVIDIA RTX 5090 we measure eight
+configurations on two inference stacks (Hugging Face Transformers with bitsandbytes, and vLLM) for five
+models from 3B to 32B parameters, with \NumMeasurements{} timed runs, real chat traffic and three
+quality benchmarks. The results form a chain. First, 4-bit weights shrink a 7B model only
+\WtNFSeven--\WtAWQSeven, not $4\times$, because the embedding, the KV cache and the activations stay
+in 16 bits. Second, the saved bytes become speed only when decoding is memory-bound and a fused kernel
+hides the dequantization: at batch size~1, 4-bit weights decode \AWQspeedup{} faster on vLLM but only
+\NFsevenB{} faster with bitsandbytes. Third, batching makes decoding compute-bound, so these
+weight-only gains vanish, as a roofline model predicts; only FP8, which also quantizes the
+activations, stays faster at every batch size. Fourth, the gains cost little quality at 8 bits and
+\MFourAbsMin--\MFourAbsMax{} MMLU points at 4 bits, more on smaller models. The best use of the saved
+memory is therefore a larger model: Qwen3-32B in 4 bits scores \BigMMLUawq\% on MMLU against
+\SmallMMLUbf\% for Qwen3-8B in BF16, with only \BigMemRatio{} the weight memory.
 \end{abstract}
